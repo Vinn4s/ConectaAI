@@ -1,99 +1,180 @@
 # ConectaAI
 
-Monorepo com os três apps do ConectaAI:
+ConectaAI é um sistema de atendimento automatizado com IA, integrado ao WhatsApp, com backend próprio e interface web para interação e testes.
 
-- `apps/backend`: API Spring Boot
-- `apps/frontend`: interface web Next.js
-- `apps/whatsapp`: bot WhatsApp com Baileys
+O projeto foi desenvolvido como uma solução prática para simular o atendimento de uma empresa, permitindo que o usuário envie mensagens, consulte informações e receba respostas geradas a partir de uma API de inteligência artificial.
 
-## Pré-requisitos
+## Objetivo do projeto
 
-- Java 21
-- Maven Wrapper, já incluído em `apps/backend`
-- Node.js e npm
+O objetivo do ConectaAI é demonstrar uma arquitetura simples e funcional para atendimento automatizado, conectando:
 
-## Variáveis de ambiente
+- Um backend em Spring Boot
+- Uma interface web em Next.js
+- Um bot de WhatsApp usando Baileys
+- Uma API de IA para geração de respostas
 
-Cada app tem um `.env.example` com os nomes esperados, sem credenciais reais:
+Este projeto também serve como estudo prático de integração entre aplicações, consumo de APIs, organização em monorepo e uso seguro de variáveis de ambiente.
 
-- `apps/backend/.env.example`
-- `apps/frontend/.env.example`
-- `apps/whatsapp/.env.example`
+## Estrutura do monorepo
 
-Não versione arquivos `.env`, `.env.local` ou equivalentes com valores reais.
+```txt
+apps/
+  backend/    API principal em Spring Boot
+  frontend/   Interface web em Next.js
+  whatsapp/   Serviço de integração com WhatsApp
 
-### Backend
+Tecnologias utilizadas
+Backend
+Java 21
+Spring Boot
+Maven
+API Groq/IA
+REST API
+Frontend
+Next.js
+React
+TypeScript
+CSS
+WhatsApp
+Node.js
+Baileys
+Axios
+QR Code via terminal
 
-Variáveis:
+Como funciona
 
-```bash
+O fluxo principal do sistema é:
+
+Usuário → WhatsApp Bot → Backend Spring Boot → API de IA → Backend → WhatsApp
+
+Também é possível interagir pelo frontend:
+
+Usuário → Interface Web → Backend Spring Boot → API de IA → Interface Web
+
+Pré-requisitos
+
+Antes de rodar o projeto, tenha instalado:
+
+Java 21
+Node.js
+npm
+Git
+
+O Maven Wrapper já está incluído em apps/backend, então não é obrigatório ter o Maven instalado globalmente.
+
+Variáveis de ambiente
+
+Cada aplicação possui um arquivo .env.example com as variáveis esperadas, sem credenciais reais:
+
+apps/backend/.env.example
+apps/frontend/.env.example
+apps/whatsapp/.env.example
+
+Arquivos .env, .env.local ou equivalentes com valores reais não devem ser versionados.
+
+Configuração do backend
+
+Arquivo de exemplo:
+
 SERVER_PORT=8081
 GROQ_API_KEY=your_groq_api_key_here
-```
 
-Para rodar localmente:
+No Windows PowerShell, você pode configurar as variáveis assim:
 
-```bash
+[Environment]::SetEnvironmentVariable("GROQ_API_KEY", "sua_chave_groq", "User")
+[Environment]::SetEnvironmentVariable("SERVER_PORT", "8081", "User")
+
+Depois de configurar, feche e reabra o terminal para as variáveis serem reconhecidas.
+
+Para rodar o backend:
+
 cd apps/backend
-export SERVER_PORT=8081
-export GROQ_API_KEY=sua_chave_groq_local
 ./mvnw spring-boot:run
-```
 
-A API ficará disponível em `http://localhost:8081`.
+No Windows, se necessário:
 
-### Frontend
+cd apps/backend
+.\mvnw.cmd spring-boot:run
 
-Variáveis:
+A API ficará disponível em:
 
-```bash
+http://localhost:8081
+
+Configuração do frontend
+
+Arquivo de exemplo:
+
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8081
-```
 
-Para rodar localmente:
+Para rodar:
 
-```bash
 cd apps/frontend
 npm install
-cp .env.example .env.local
 npm run dev
-```
 
-O frontend ficará disponível em `http://localhost:3000`.
+O frontend ficará disponível em:
 
-### WhatsApp
+http://localhost:3000
 
-Variáveis:
+Configuração do WhatsApp
 
-```bash
+Arquivo de exemplo:
+
 BACKEND_URL=http://localhost:8081
-```
 
-Para rodar localmente:
+Para rodar:
 
-```bash
 cd apps/whatsapp
 npm install
-export BACKEND_URL=http://localhost:8081
 npm start
-```
 
-Ao iniciar, o app gera um QR Code no terminal para conectar o WhatsApp.
+Ao iniciar, o terminal exibirá um QR Code. Escaneie o código com o WhatsApp para conectar o bot.
 
-## Ordem recomendada para desenvolvimento
+Ordem recomendada para desenvolvimento
+Inicie o backend em apps/backend.
+Inicie o frontend em apps/frontend.
+Inicie o serviço do WhatsApp em apps/whatsapp.
+Escaneie o QR Code exibido no terminal.
+Teste o fluxo de mensagens.
+Segurança
 
-1. Inicie o backend em `apps/backend`.
-2. Inicie o frontend em `apps/frontend`.
-3. Inicie o WhatsApp em `apps/whatsapp` e escaneie o QR Code.
+Este projeto utiliza variáveis de ambiente para proteger chaves de API e configurações sensíveis.
 
-## Arquivos que não devem ir para o Git
+O .gitignore da raiz ignora arquivos locais e artefatos gerados, incluindo:
 
-O `.gitignore` da raiz ignora arquivos locais e artefatos gerados, incluindo:
+.env, .env.local e variações
+node_modules
+target
+.next
+dist e build
+auth_info_baileys
+logs e arquivos temporários
 
-- `.env`, `.env.local` e variações locais
-- `node_modules`
-- `target`
-- `.next`
-- `dist` e `build`
-- `auth_info_baileys`
-- logs e arquivos temporários comuns
+Nunca envie chaves reais de API, tokens, sessões do WhatsApp ou credenciais para o GitHub.
+
+Status do projeto
+
+Projeto em desenvolvimento.
+
+Funcionalidades atuais:
+
+Backend Spring Boot funcional
+Frontend Next.js integrado ao backend
+Bot de WhatsApp conectado ao backend
+Integração com API de IA
+Organização em monorepo
+Variáveis de ambiente separadas por aplicação
+
+Melhorias futuras planejadas:
+
+Dashboard administrativo
+Histórico de conversas
+Autenticação de usuários
+Banco de dados
+Deploy em ambiente cloud
+Melhorias no fluxo de atendimento
+Autor
+
+Desenvolvido por Vinnícius Yuri.
+
+Projeto criado como parte dos estudos e desenvolvimento prático em programação fullstack, APIs, automação e inteligência artificial.
