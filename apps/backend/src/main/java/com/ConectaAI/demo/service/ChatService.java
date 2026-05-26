@@ -17,10 +17,12 @@ import com.ConectaAI.demo.dto.ChatResponse;
 public class ChatService {
 
     private final GroqService groqService;
+    private final IntentInterpreterService intentInterpreterService;
 
-    public ChatService(GroqService groqService) {
-        this.groqService = groqService;
-    }
+    public ChatService(GroqService groqService, IntentInterpreterService intentInterpreterService) {
+    this.groqService = groqService;
+    this.intentInterpreterService = intentInterpreterService;
+}
 
     private final Map<String, PedidoPendente> pedidosPendentes = new ConcurrentHashMap<>();
 
@@ -71,108 +73,131 @@ public class ChatService {
 
     public ChatResponse processMessage(String customerId, String message) {
 
-        String cliente = normalizarCustomerId(customerId);
-        String msg = message == null ? "" : message.toLowerCase();
+    String cliente = normalizarCustomerId(customerId);
+    String msg = message == null ? "" : message.toLowerCase();
 
-        if (msg.trim().equals("/reset")) {
-            pedidosPendentes.remove(cliente);
-            clientesAguardandoHumano.remove(cliente);
-
-            return new ChatResponse(
-                "Atendimento reiniciado para testes.",
-                false,
-                "INFO"
-            );
-        }
-
-        if (clientesAguardandoHumano.contains(cliente)) {
-            return new ChatResponse(
-                "Seu atendimento já foi encaminhado para um atendente humano. Aguarde um instante, por favor. 😊",
-                true,
-                "HUMAN_WAITING"
-            );
-        }
-
-        if (pedidosPendentes.containsKey(cliente)) {
-
-            if (isConfirmacao(msg)) {
-                PedidoPendente pedidoConfirmado = pedidosPendentes.get(cliente);
-
-                pedidosPendentes.remove(cliente);
-                clientesAguardandoHumano.add(cliente);
-
-                return new ChatResponse(
-                    montarMensagemConfirmacao(pedidoConfirmado),
-                    true,
-                    "SALE"
-                );
-            }
-
-            if (isReclamacaoPreco(msg)) {
-                return new ChatResponse(
-                    "Entendo 😅 Esse é o valor atual do produto. Deseja manter o pedido?",
-                    false,
-                    "INFO"
-                );
-            }
-
-            if (isCancelamento(msg)) {
-                pedidosPendentes.remove(cliente);
-
-                return new ChatResponse(
-                    "Tudo bem, cancelei esse pedido. Posso ajudar com mais alguma coisa?",
-                    false,
-                    "INFO"
-                );
-            }
-        }
-
-        List<Produto> produtosEncontrados = encontrarProdutos(msg);
-
-        if (!produtosEncontrados.isEmpty()) {
-
-            if (isPerguntaSobreProduto(msg)) {
-                return new ChatResponse(
-                    montarRespostaInformativa(produtosEncontrados),
-                    false,
-                    "INFO"
-                );
-            }
-
-            if (isIntencaoDeCompra(msg)) {
-                List<ItemPedido> itens = extrairItensPedido(msg);
-
-                if (itens.isEmpty()) {
-                    return new ChatResponse(
-                        "Não consegui identificar os produtos do pedido. Pode me dizer quais itens deseja?",
-                        false,
-                        "INFO"
-                    );
-                }
-
-                PedidoPendente pedido = new PedidoPendente(itens);
-                pedidosPendentes.put(cliente, pedido);
-
-                return new ChatResponse(
-                    montarMensagemPedido(pedido),
-                    false,
-                    "INFO"
-                );
-            }
-
-            return new ChatResponse(
-                montarRespostaInformativa(produtosEncontrados) + " Deseja comprar?",
-                false,
-                "INFO"
-            );
-        }
+    // 1. Reset precisa vir antes de tudo
+    if (msg.trim().equals("/reset")) {
+        pedidosPendentes.remove(cliente);
+        clientesAguardandoHumano.remove(cliente);
 
         return new ChatResponse(
-            groqService.callGroq(message),
+            "Atendimento reiniciado para testes.",
             false,
             "INFO"
         );
     }
+
+    // 2. Se já foi encaminhado para humano, não gasta IA e não continua o fluxo
+    if (clientesAguardandoHumano.contains(cliente)) {
+        return new ChatResponse(
+            "Seu atendimento já foi encaminhado para um atendente humano. Aguarde um instante, por favor. 😊",
+            true,
+            "HUMAN_WAITING"
+        );
+    }
+
+    // 3. Só agora vale chamar a IA para interpretar a intenção
+    boolean hasPendingOrder = pedidosPendentes.containsKey(cliente);
+
+    String intent = intentInterpreterService
+        .analyze(message, hasPendingOrder)
+        .getIntent();
+
+    System.out.println("Intenção detectada: " + intent);
+
+    // 4. Fluxo de pedido pendente
+    if (pedidosPendentes.containsKey(cliente)) {
+
+        if (intent.equals("CONFIRM_ORDER")) {
+            PedidoPendente pedidoConfirmado = pedidosPendentes.get(cliente);
+
+            pedidosPendentes.remove(cliente);
+            clientesAguardandoHumano.add(cliente);
+
+            return new ChatResponse(
+                montarMensagemConfirmacao(pedidoConfirmado),
+                true,
+                "SALE"
+            );
+        }
+
+        if (intent.equals("PRICE_OBJECTION")) {
+            return new ChatResponse(
+                "Entendo 😅 Esse é o valor atual do produto. Deseja manter o pedido?",
+                false,
+                "INFO"
+            );
+        }
+
+        if (intent.equals("CANCEL_ORDER")) {
+            pedidosPendentes.remove(cliente);
+
+            return new ChatResponse(
+                "Tudo bem, cancelei esse pedido. Posso ajudar com mais alguma coisa?",
+                false,
+                "INFO"
+            );
+        }
+    }
+
+    // 5. Fluxo de produto encontrado
+    List<Produto> produtosEncontrados = encontrarProdutos(msg);
+
+    if (!produtosEncontrados.isEmpty()) {
+
+        if (intent.equals("ASK_PRODUCT_INFO")) {
+            return new ChatResponse(
+                montarRespostaInformativa(produtosEncontrados),
+                false,
+                "INFO"
+            );
+        }
+
+        if (intent.equals("BUY")) {
+            List<ItemPedido> itens = extrairItensPedido(msg);
+
+            if (itens.isEmpty()) {
+                return new ChatResponse(
+                    "Não consegui identificar os produtos do pedido. Pode me dizer quais itens deseja?",
+                    false,
+                    "INFO"
+                );
+            }
+
+            PedidoPendente pedido = new PedidoPendente(itens);
+            pedidosPendentes.put(cliente, pedido);
+
+            return new ChatResponse(
+                montarMensagemPedido(pedido),
+                false,
+                "INFO"
+            );
+        }
+
+        if (intent.equals("PRICE_OBJECTION")) {
+    return new ChatResponse(
+        montarRespostaObjeçãoPreco(produtosEncontrados),
+        false,
+        "INFO"
+    );
+}
+
+        return new ChatResponse(
+            montarRespostaInformativa(produtosEncontrados) + " Deseja comprar?",
+            false,
+            "INFO"
+        );
+        
+    }
+
+    // 6. Fluxo normal com IA de atendimento
+    return new ChatResponse(
+        groqService.callGroq(message),
+        false,
+        "INFO"
+    );
+}
 
     private List<Produto> encontrarProdutos(String msg) {
         List<Produto> encontrados = new ArrayList<>();
@@ -429,6 +454,18 @@ public class ChatService {
 
         return customerId;
     }
+
+    private String montarRespostaObjeçãoPreco(List<Produto> produtosEncontrados) {
+    if (produtosEncontrados.size() == 1) {
+        Produto produto = produtosEncontrados.get(0);
+
+        return "Entendo 😅 O valor atual de " + produto.nome() +
+            " é R$ " + produto.preco() +
+            ". Posso te ajudar com outro produto ou informação?";
+    }
+
+    return "Entendo 😅 Esses são os valores atuais dos produtos. Posso te ajudar com outro produto ou informação?";
+}
 
     private record Produto(
         String nome,
