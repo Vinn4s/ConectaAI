@@ -106,43 +106,124 @@ public class ChatService {
 
     System.out.println("Intenção detectada: " + intent);
 
+    List<Produto> produtosEncontrados = encontrarProdutos(msg);
+
     // 4. Fluxo de pedido pendente
     if (pedidosPendentes.containsKey(cliente)) {
 
-        if (intent.equals("CONFIRM_ORDER")) {
-            PedidoPendente pedidoConfirmado = pedidosPendentes.get(cliente);
+    PedidoPendente pedidoAtual = pedidosPendentes.get(cliente);
 
-            pedidosPendentes.remove(cliente);
-            clientesAguardandoHumano.add(cliente);
+    if ("CONFIRM_ORDER".equals(intent)) {
+        pedidosPendentes.remove(cliente);
+        clientesAguardandoHumano.add(cliente);
 
-            return new ChatResponse(
-                montarMensagemConfirmacao(pedidoConfirmado),
-                true,
-                "SALE"
-            );
-        }
-
-        if (intent.equals("PRICE_OBJECTION")) {
-            return new ChatResponse(
-                "Entendo 😅 Esse é o valor atual do produto. Deseja manter o pedido?",
-                false,
-                "INFO"
-            );
-        }
-
-        if (intent.equals("CANCEL_ORDER")) {
-            pedidosPendentes.remove(cliente);
-
-            return new ChatResponse(
-                "Tudo bem, cancelei esse pedido. Posso ajudar com mais alguma coisa?",
-                false,
-                "INFO"
-            );
-        }
+        return new ChatResponse(
+            montarMensagemConfirmacao(pedidoAtual),
+            true,
+            "SALE"
+        );
     }
 
+    if ("CANCEL_ORDER".equals(intent)) {
+        pedidosPendentes.remove(cliente);
+
+        return new ChatResponse(
+            "Tudo bem, cancelei esse pedido. Posso ajudar com mais alguma coisa?",
+            false,
+            "INFO"
+        );
+    }
+
+    if ("PRICE_OBJECTION".equals(intent)) {
+        return new ChatResponse(
+            "Entendo 😅 Seu pedido atual continua sendo: " +
+            montarResumoPedidoCurto(pedidoAtual) +
+            ". Deseja confirmar, alterar ou cancelar?",
+            false,
+            "INFO"
+        );
+    }
+
+    if ("ASK_PRODUCT_INFO".equals(intent) && !produtosEncontrados.isEmpty()) {
+        return new ChatResponse(
+            montarRespostaInformativa(produtosEncontrados) +
+            "\n\nSeu pedido atual continua sendo: " +
+            montarResumoPedidoCurto(pedidoAtual) +
+            ". Deseja confirmar, alterar ou cancelar?",
+            false,
+            "INFO"
+        );
+    }
+
+    if (("ADD_TO_ORDER".equals(intent) || "BUY".equals(intent)) && !produtosEncontrados.isEmpty()) {
+        List<ItemPedido> novosItens = extrairItensPedido(msg);
+
+        PedidoPendente pedidoAtualizado = mesclarPedido(pedidoAtual, novosItens);
+        pedidosPendentes.put(cliente, pedidoAtualizado);
+
+        return new ChatResponse(
+            montarMensagemPedidoAtualizado(pedidoAtualizado),
+            false,
+            "INFO"
+        );
+    }
+
+    if ("REPLACE_ORDER".equals(intent) && !produtosEncontrados.isEmpty()) {
+        List<ItemPedido> novosItens = extrairItensPedido(msg);
+
+        PedidoPendente pedidoAtualizado = new PedidoPendente(novosItens);
+        pedidosPendentes.put(cliente, pedidoAtualizado);
+
+        return new ChatResponse(
+            montarMensagemPedidoAtualizado(pedidoAtualizado),
+            false,
+            "INFO"
+        );
+    }
+
+    if ("REMOVE_FROM_ORDER".equals(intent)) {
+        List<ItemPedido> itensParaRemover = extrairItensPedido(msg);
+
+        if (itensParaRemover.isEmpty()) {
+            return new ChatResponse(
+                "Qual item você deseja remover do pedido?",
+                false,
+                "INFO"
+            );
+        }
+
+        PedidoPendente pedidoAtualizado = removerItensDoPedido(pedidoAtual, itensParaRemover);
+
+        if (pedidoAtualizado.itens().isEmpty()) {
+            pedidosPendentes.remove(cliente);
+
+            return new ChatResponse(
+                "Removi os itens informados. Seu pedido ficou vazio. Posso ajudar com outro pedido?",
+                false,
+                "INFO"
+            );
+        }
+
+        pedidosPendentes.put(cliente, pedidoAtualizado);
+
+        return new ChatResponse(
+            montarMensagemPedidoAtualizado(pedidoAtualizado),
+            false,
+            "INFO"
+        );
+    }
+
+    return new ChatResponse(
+        "Seu pedido atual é: " +
+        montarResumoPedidoCurto(pedidoAtual) +
+        ". Deseja confirmar, alterar ou cancelar?",
+        false,
+        "INFO"
+    );
+}
+
     // 5. Fluxo de produto encontrado
-    List<Produto> produtosEncontrados = encontrarProdutos(msg);
+   
 
     if (!produtosEncontrados.isEmpty()) {
 
@@ -465,6 +546,104 @@ public class ChatService {
     }
 
     return "Entendo 😅 Esses são os valores atuais dos produtos. Posso te ajudar com outro produto ou informação?";
+}
+
+    private PedidoPendente mesclarPedido(PedidoPendente pedidoAtual, List<ItemPedido> novosItens) {
+    Map<String, ItemPedido> mapa = new LinkedHashMap<>();
+
+    for (ItemPedido item : pedidoAtual.itens()) {
+        mapa.put(item.produto().nome(), item);
+    }
+
+    for (ItemPedido item : novosItens) {
+        ItemPedido existente = mapa.get(item.produto().nome());
+
+        if (existente == null) {
+            mapa.put(item.produto().nome(), item);
+        } else {
+            mapa.put(
+                item.produto().nome(),
+                new ItemPedido(
+                    item.produto(),
+                    existente.quantidade() + item.quantidade()
+                )
+            );
+        }
+    }
+
+    return new PedidoPendente(new ArrayList<>(mapa.values()));
+}
+
+private PedidoPendente removerItensDoPedido(PedidoPendente pedidoAtual, List<ItemPedido> itensParaRemover) {
+    Map<String, ItemPedido> mapa = new LinkedHashMap<>();
+
+    for (ItemPedido item : pedidoAtual.itens()) {
+        mapa.put(item.produto().nome(), item);
+    }
+
+    for (ItemPedido itemRemover : itensParaRemover) {
+        ItemPedido existente = mapa.get(itemRemover.produto().nome());
+
+        if (existente == null) {
+            continue;
+        }
+
+        int novaQuantidade = existente.quantidade() - itemRemover.quantidade();
+
+        if (novaQuantidade <= 0) {
+            mapa.remove(itemRemover.produto().nome());
+        } else {
+            mapa.put(
+                existente.produto().nome(),
+                new ItemPedido(existente.produto(), novaQuantidade)
+            );
+        }
+    }
+
+    return new PedidoPendente(new ArrayList<>(mapa.values()));
+}
+
+private String montarMensagemPedidoAtualizado(PedidoPendente pedido) {
+    int total = calcularTotal(pedido);
+
+    if (pedido.itens().size() == 1) {
+        ItemPedido item = pedido.itens().get(0);
+
+        return "Certo, atualizei seu pedido: " +
+            montarDescricaoItem(item) +
+            ", total de R$ " + total +
+            ". Deseja confirmar?";
+    }
+
+    StringBuilder resposta = new StringBuilder("Certo, atualizei seu pedido:\n");
+
+    for (ItemPedido item : pedido.itens()) {
+        resposta.append("- ")
+            .append(montarDescricaoItem(item))
+            .append(": R$ ")
+            .append(calcularSubtotal(item))
+            .append("\n");
+    }
+
+    resposta.append("\nTotal: R$ ")
+        .append(total)
+        .append(".\nDeseja confirmar?");
+
+    return resposta.toString();
+}
+
+private String montarResumoPedidoCurto(PedidoPendente pedido) {
+    StringBuilder resumo = new StringBuilder();
+
+    for (int i = 0; i < pedido.itens().size(); i++) {
+        resumo.append(montarDescricaoItem(pedido.itens().get(i)));
+
+        if (i < pedido.itens().size() - 1) {
+            resumo.append(", ");
+        }
+    }
+
+    return resumo.toString();
 }
 
     private record Produto(
