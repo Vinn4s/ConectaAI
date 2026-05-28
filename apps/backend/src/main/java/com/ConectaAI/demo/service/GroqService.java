@@ -18,10 +18,12 @@ public class GroqService {
 
     private final PdfService pdfService;
     private final TimeContextService timeContextService;
+    private final ProductCatalogService productCatalogService;
 
-    public GroqService(PdfService pdfService, TimeContextService timeContextService) {
+    public GroqService(PdfService pdfService, TimeContextService timeContextService, ProductCatalogService productCatalogService) {
         this.pdfService = pdfService;
         this.timeContextService = timeContextService;
+        this.productCatalogService = productCatalogService;
     }
 
     @Value("${groq.api.key}")
@@ -40,6 +42,7 @@ public class GroqService {
 
         String contexto = pdfService.readPdf();
         String contextoHorarioAtual = timeContextService.getCurrentTimeContext();
+        String catalogoOficial = productCatalogService.getCatalogoFormatadoParaIa();
 
         messages.add(Map.of(
     "role", "system",
@@ -75,7 +78,12 @@ public class GroqService {
 
         "Quando o cliente perguntar sobre produto, preço, estoque ou horário, responda somente com base nas informações abaixo. " +
         "Se não tiver a informação, diga que não possui essa informação no momento. " +
+
+        "CATÁLOGO OFICIAL: " +
+"Para produtos, preços e disponibilidade, use exclusivamente o catálogo oficial informado abaixo. " +
+"Se houver conflito entre o PDF e o catálogo oficial, o catálogo oficial tem prioridade para produtos e preços. " +
         
+        "Catálogo oficial de produtos:\n" + catalogoOficial + "\n\n" +
         "Data e hora atual:\n" + contextoHorarioAtual + "\n\n" +
         "Informações da empresa:\n\n" + contexto
 ));
