@@ -1,8 +1,31 @@
 HELP.md
+
+### Java / Maven ###
 target/
 .mvn/wrapper/maven-wrapper.jar
+hs_err_pid*.log
+*.log
+
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Environment / Secrets ###
+.env
+.env.local
+.env.*.local
+application-secrets.properties
+
+### WhatsApp / Baileys ###
+auth_info_baileys/
+**/auth_info_baileys/
+
+### Node / Frontend / WhatsApp ###
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+build/
 
 ### STS ###
 .apt_generated
@@ -14,7 +37,7 @@ target/
 .sts4-cache
 
 ### IntelliJ IDEA ###
-.idea
+.idea/
 *.iws
 *.iml
 *.ipr
@@ -25,11 +48,9 @@ target/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
+
 !**/src/main/**/build/
 !**/src/test/**/build/
 
 ### VS Code ###
 .vscode/
-
-echo hs_err_pid*.log >> .gitignore

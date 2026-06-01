@@ -48,7 +48,8 @@ export default function Home() {
         backgroundColor: msg.type === "SALE" ? "#d4edda" : "#f1f1f1",
         padding: 8,
         marginBottom: 5,
-        borderRadius: 5
+        borderRadius: 5,
+        whiteSpace: 'pre-wrap'
       }}
     >
       <strong>{msg.sender}:</strong> {msg.text}
