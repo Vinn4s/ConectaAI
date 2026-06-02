@@ -19,11 +19,18 @@ public class GroqService {
     private final PdfService pdfService;
     private final TimeContextService timeContextService;
     private final ProductCatalogService productCatalogService;
+    private final CompanyConfigService companyConfigService;
 
-    public GroqService(PdfService pdfService, TimeContextService timeContextService, ProductCatalogService productCatalogService) {
+    public GroqService(
+        PdfService pdfService,
+        TimeContextService timeContextService,
+        ProductCatalogService productCatalogService,
+        CompanyConfigService companyConfigService
+    ) {
         this.pdfService = pdfService;
         this.timeContextService = timeContextService;
         this.productCatalogService = productCatalogService;
+        this.companyConfigService = companyConfigService;
     }
 
     @Value("${groq.api.key}")
@@ -43,11 +50,12 @@ public class GroqService {
         String contexto = pdfService.readPdf();
         String contextoHorarioAtual = timeContextService.getCurrentTimeContext();
         String catalogoOficial = productCatalogService.getCatalogoFormatadoParaIa();
+        String informacoesEmpresa = companyConfigService.getCompanyInfoFormattedForIa();
 
         messages.add(Map.of(
     "role", "system",
     "content",
-        "Você é um atendente virtual do Mercadinho Silva. " +
+        "Você é um atendente virtual da empresa configurada abaixo. " +
         "Seu papel é atender clientes de forma educada, simples, comercial e objetiva. " +
 
         "Responda sempre como um atendente de mercado. " +
@@ -64,6 +72,10 @@ public class GroqService {
         "Não peça contexto demais. " +
 
         "NÃO invente produtos, preços, horários, formas de pagamento, entrega ou estoque. " +
+
+        "Para endereço, telefone, formas de pagamento, horário e informações da empresa, use somente as informações configuradas abaixo. " +
+        "Se a informação não estiver disponível, diga que não possui essa informação no momento. " +
+        "Nunca invente endereço, telefone ou dados da empresa. " +
 
         "REGRA SOBRE HORÁRIO: " +
         "Use a data e hora atual informada abaixo junto com o horário de funcionamento descrito nas informações da empresa. " +
@@ -83,9 +95,10 @@ public class GroqService {
 "Para produtos, preços e disponibilidade, use exclusivamente o catálogo oficial informado abaixo. " +
 "Se houver conflito entre o PDF e o catálogo oficial, o catálogo oficial tem prioridade para produtos e preços. " +
         
+        "Informações configuradas da empresa:\n" + informacoesEmpresa + "\n\n" +
         "Catálogo oficial de produtos:\n" + catalogoOficial + "\n\n" +
         "Data e hora atual:\n" + contextoHorarioAtual + "\n\n" +
-        "Informações da empresa:\n\n" + contexto
+        "Informações adicionais da empresa via PDF:\n\n" + contexto
 ));
 
         messages.add(Map.of(

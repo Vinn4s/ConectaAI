@@ -19,6 +19,7 @@ public class ChatService {
 
     private final GroqService groqService;
     private final IntentInterpreterService intentInterpreterService;
+    private final CompanyConfigService companyConfigService;
     private final Map<String, Produto> produtos;
 
     private final Map<String, PedidoPendente> pedidosPendentes = new ConcurrentHashMap<>();
@@ -30,10 +31,12 @@ public class ChatService {
     public ChatService(
         GroqService groqService,
         IntentInterpreterService intentInterpreterService,
+        CompanyConfigService companyConfigService,
         ProductCatalogService productCatalogService
     ) {
         this.groqService = groqService;
         this.intentInterpreterService = intentInterpreterService;
+        this.companyConfigService = companyConfigService;
         this.produtos = productCatalogService.getProdutos();
     }
 
@@ -62,6 +65,14 @@ public class ChatService {
             );
         }
 
+        if (isPerguntaCatalogoGeral(msg)) {
+        return new ChatResponse(
+        montarCatalogoCompleto(),
+        false,
+        "INFO"
+        );
+        }
+
         boolean hasPendingOrder = pedidosPendentes.containsKey(cliente);
 
         String intent = intentInterpreterService
@@ -69,6 +80,14 @@ public class ChatService {
             .getIntent();
 
         System.out.println("Intenção detectada: " + intent);
+
+        if ("ASK_HOURS".equals(intent)) {
+            return new ChatResponse(
+                companyConfigService.getRespostaHorarioFuncionamento(),
+                false,
+                "INFO"
+            );
+        }
 
         List<Produto> produtosEncontrados = encontrarProdutos(msg);
 
@@ -230,6 +249,8 @@ public class ChatService {
                 "INFO"
             );
         }
+
+
 
         return new ChatResponse(
             groqService.callGroq(originalMessage),
@@ -543,4 +564,42 @@ public class ChatService {
     private record PedidoPendente(
         List<ItemPedido> itens
     ) {}
+
+    private boolean isPerguntaCatalogoGeral(String msg) {
+    return msg.contains("catálogo") ||
+           msg.contains("catalogo") ||
+           msg.contains("produtos") ||
+           msg.contains("o que vocês têm") ||
+           msg.contains("o que voces tem") ||
+           msg.contains("o que tem") ||
+           msg.contains("o que vende") ||
+           msg.contains("vocês vendem") ||
+           msg.contains("voces vendem");
+}
+
+private String montarCatalogoCompleto() {
+    StringBuilder resposta = new StringBuilder("Nossa lista de produtos inclui:\n\n");
+
+    for (Produto produto : produtos.values()) {
+        resposta.append("- ")
+            .append(capitalizar(produto.nome()))
+            .append(" - R$ ")
+            .append(produto.preco())
+            .append(" por ")
+            .append(produto.unidadeSingular())
+            .append("\n");
+    }
+
+    resposta.append("\nVocê gostaria de saber mais sobre algum desses produtos?");
+
+    return resposta.toString().trim();
+}
+
+private String capitalizar(String texto) {
+    if (texto == null || texto.isBlank()) {
+        return texto;
+    }
+
+    return texto.substring(0, 1).toUpperCase() + texto.substring(1);
+}
 }

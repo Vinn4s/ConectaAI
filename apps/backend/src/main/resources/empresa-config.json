@@ -2,6 +2,7 @@
   "empresa": {
     "nome": "Mercadinho Silva",
     "telefone": "(00) 00000-0000",
+    "timezone": "America/Fortaleza",
     "formasPagamento": ["dinheiro", "pix", "cartao de débito", "cartao de crédito"],
     "endereco": {
       "logradouro": "Rua das Flores",
@@ -45,7 +46,7 @@
     },
     {
       "nome": "chocolate",
-      "preco": 5,
+      "preco": 10,
       "unidadeSingular": "unidade",
       "unidadePlural": "unidades",
       "aliases": ["chocolate", "chocolates"]

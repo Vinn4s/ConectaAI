@@ -9,22 +9,21 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PdfService {
+
     public String readPdf() {
-        try {
-            File file = new File("empresa.pdf");
+        File file = new File("empresa.pdf");
 
-            PDDocument document = PDDocument.load(file);
+        if (!file.exists()) {
+            return "Nenhum PDF da empresa foi configurado no momento.";
+        }
 
+        try (PDDocument document = PDDocument.load(file)) {
             PDFTextStripper pdfStripper = new PDFTextStripper();
 
-            String text = pdfStripper.getText(document);
+            return pdfStripper.getText(document);
 
-            document.close();
-            return text;
         } catch (IOException e) {
-            e.printStackTrace();
-            return "Erro ao ler o PDF.";
+            return "Erro ao ler o PDF da empresa.";
         }
-    } 
-   
+    }
 }
