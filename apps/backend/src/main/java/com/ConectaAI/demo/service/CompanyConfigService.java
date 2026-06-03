@@ -6,6 +6,8 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -78,6 +80,50 @@ public class CompanyConfigService {
         }
 
         return info.toString().trim();
+    }
+
+    public EmpresaInfo getEmpresaInfo() {
+        Empresa empresa = config.empresa;
+
+        return new EmpresaInfo(
+            empresa.nome,
+            empresa.telefone,
+            empresa.timezone,
+            empresa.formasPagamento == null ? List.of() : List.copyOf(empresa.formasPagamento),
+            criarEnderecoInfo(empresa.endereco)
+        );
+    }
+
+    public Map<String, HorarioFuncionamentoInfo> getHorarioFuncionamento() {
+        Map<String, HorarioFuncionamentoInfo> horarios = new LinkedHashMap<>();
+
+        for (Map.Entry<String, HorarioFuncionamento> entry : config.horarioFuncionamento.entrySet()) {
+            HorarioFuncionamento horario = entry.getValue();
+            horarios.put(
+                entry.getKey(),
+                new HorarioFuncionamentoInfo(
+                    horario == null ? null : horario.abertura,
+                    horario == null ? null : horario.fechamento
+                )
+            );
+        }
+
+        return Collections.unmodifiableMap(horarios);
+    }
+
+    private EnderecoInfo criarEnderecoInfo(Endereco endereco) {
+        if (endereco == null) {
+            return null;
+        }
+
+        return new EnderecoInfo(
+            endereco.logradouro,
+            endereco.numero,
+            endereco.bairro,
+            endereco.cidade,
+            endereco.estado,
+            endereco.cep
+        );
     }
 
     public String getRespostaHorarioFuncionamento() {
@@ -212,6 +258,28 @@ public class CompanyConfigService {
         public String abertura;
         public String fechamento;
     }
+
+    public record EmpresaInfo(
+        String nome,
+        String telefone,
+        String timezone,
+        List<String> formasPagamento,
+        EnderecoInfo endereco
+    ) {}
+
+    public record EnderecoInfo(
+        String logradouro,
+        String numero,
+        String bairro,
+        String cidade,
+        String estado,
+        String cep
+    ) {}
+
+    public record HorarioFuncionamentoInfo(
+        String abertura,
+        String fechamento
+    ) {}
 
     private String valorOuPadrao(String value, String defaultValue) {
     return isBlank(value) ? defaultValue : value;
