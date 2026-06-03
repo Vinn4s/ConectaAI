@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 const adminConfigUrl = 'http://localhost:8081/admin/config';
+const adminHandoffsUrl = 'http://localhost:8081/admin/handoffs';
 
 type Empresa = {
   nome: string;
@@ -36,6 +37,12 @@ type AdminConfig = {
   empresa: Empresa;
   horarioFuncionamento: Record<string, HorarioFuncionamento>;
   produtos: Produto[];
+};
+
+type HumanHandoff = {
+  customerId: string;
+  resumoPedido: string;
+  criadoEm: string;
 };
 
 const diasSemana = [
@@ -80,10 +87,26 @@ function formatarPreco(preco: number) {
   }).format(preco);
 }
 
+function formatarCriadoEm(criadoEm: string) {
+  const data = new Date(criadoEm);
+
+  if (Number.isNaN(data.getTime())) {
+    return criadoEm;
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(data);
+}
+
 export default function AdminConfigPage() {
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [handoffs, setHandoffs] = useState<HumanHandoff[]>([]);
+  const [isLoadingHandoffs, setIsLoadingHandoffs] = useState(true);
+  const [handoffsError, setHandoffsError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -122,6 +145,45 @@ export default function AdminConfigPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function carregarHandoffs() {
+      try {
+        setIsLoadingHandoffs(true);
+        setHandoffsError(null);
+
+        const response = await fetch(adminHandoffsUrl);
+
+        if (!response.ok) {
+          throw new Error(`Erro ${response.status} ao carregar atendimentos pendentes.`);
+        }
+
+        const data = (await response.json()) as HumanHandoff[];
+
+        if (isMounted) {
+          setHandoffs(data);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setHandoffsError(
+            err instanceof Error ? err.message : 'Não foi possível carregar os atendimentos pendentes.'
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingHandoffs(false);
+        }
+      }
+    }
+
+    carregarHandoffs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const enderecoCompleto = useMemo(() => formatarEndereco(config?.empresa.endereco ?? null), [config]);
 
   return (
@@ -132,6 +194,50 @@ export default function AdminConfigPage() {
           <h1 className="mt-2 text-3xl font-semibold">Configuração da empresa</h1>
           <p className="mt-2 text-sm text-neutral-600">Visualização dos dados usados pelo atendimento.</p>
         </header>
+
+        <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="text-xl font-semibold">Atendimentos pendentes</h2>
+            {!isLoadingHandoffs && !handoffsError && (
+              <p className="text-sm text-neutral-500">{handoffs.length} {handoffs.length === 1 ? 'pendente' : 'pendentes'}</p>
+            )}
+          </div>
+
+          {isLoadingHandoffs && <p className="mt-5 text-neutral-600">Carregando atendimentos pendentes...</p>}
+
+          {handoffsError && (
+            <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+              <p className="text-sm">{handoffsError}</p>
+            </div>
+          )}
+
+          {!isLoadingHandoffs && !handoffsError && handoffs.length === 0 && (
+            <p className="mt-5 text-neutral-600">Nenhum atendimento pendente no momento.</p>
+          )}
+
+          {!isLoadingHandoffs && !handoffsError && handoffs.length > 0 && (
+            <div className="mt-5 overflow-x-auto rounded-lg border border-neutral-200">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead className="bg-neutral-100 text-neutral-600">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Cliente</th>
+                    <th className="px-4 py-3 font-medium">Pedido</th>
+                    <th className="px-4 py-3 font-medium">Criado em</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-200">
+                  {handoffs.map((handoff) => (
+                    <tr key={`${handoff.customerId}-${handoff.criadoEm}`}>
+                      <td className="px-4 py-3 font-medium">{handoff.customerId}</td>
+                      <td className="px-4 py-3 text-neutral-700">{handoff.resumoPedido}</td>
+                      <td className="px-4 py-3 text-neutral-700">{formatarCriadoEm(handoff.criadoEm)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         {isLoading && (
           <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
