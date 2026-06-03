@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,10 +19,10 @@ public class ChatService {
     private final GroqService groqService;
     private final IntentInterpreterService intentInterpreterService;
     private final CompanyConfigService companyConfigService;
+    private final HumanHandoffService humanHandoffService;
     private final Map<String, Produto> produtos;
 
     private final Map<String, PedidoPendente> pedidosPendentes = new ConcurrentHashMap<>();
-    private final Set<String> clientesAguardandoHumano = ConcurrentHashMap.newKeySet();
 
     private static final String NUMEROS_PATTERN =
         "\\d+|um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez";
@@ -32,11 +31,13 @@ public class ChatService {
         GroqService groqService,
         IntentInterpreterService intentInterpreterService,
         CompanyConfigService companyConfigService,
+        HumanHandoffService humanHandoffService,
         ProductCatalogService productCatalogService
     ) {
         this.groqService = groqService;
         this.intentInterpreterService = intentInterpreterService;
         this.companyConfigService = companyConfigService;
+        this.humanHandoffService = humanHandoffService;
         this.produtos = productCatalogService.getProdutos();
     }
 
@@ -48,7 +49,7 @@ public class ChatService {
 
         if (msg.trim().equals("/reset")) {
             pedidosPendentes.remove(cliente);
-            clientesAguardandoHumano.remove(cliente);
+            humanHandoffService.removerCliente(cliente);
 
             return new ChatResponse(
                 "Atendimento reiniciado para testes.",
@@ -57,7 +58,7 @@ public class ChatService {
             );
         }
 
-        if (clientesAguardandoHumano.contains(cliente)) {
+        if (humanHandoffService.clienteAguardandoHumano(cliente)) {
             return new ChatResponse(
                 "Seu atendimento já foi encaminhado para um atendente humano. Aguarde um instante, por favor. 😊",
                 true,
@@ -97,7 +98,10 @@ public class ChatService {
 
             if ("CONFIRM_ORDER".equals(intent)) {
                 pedidosPendentes.remove(cliente);
-                clientesAguardandoHumano.add(cliente);
+                humanHandoffService.registrarClienteAguardandoHumano(
+                    cliente,
+                    montarResumoPedidoCurto(pedidoAtual)
+                );
 
                 return new ChatResponse(
                     montarMensagemConfirmacao(pedidoAtual),
