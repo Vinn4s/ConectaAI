@@ -107,6 +107,8 @@ export default function AdminConfigPage() {
   const [handoffs, setHandoffs] = useState<HumanHandoff[]>([]);
   const [isLoadingHandoffs, setIsLoadingHandoffs] = useState(true);
   const [handoffsError, setHandoffsError] = useState<string | null>(null);
+  const [finalizandoHandoffs, setFinalizandoHandoffs] = useState<Set<string>>(new Set());
+  const [finalizarHandoffError, setFinalizarHandoffError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -186,6 +188,33 @@ export default function AdminConfigPage() {
 
   const enderecoCompleto = useMemo(() => formatarEndereco(config?.empresa.endereco ?? null), [config]);
 
+  async function finalizarAtendimento(customerId: string) {
+    setFinalizarHandoffError(null);
+    setFinalizandoHandoffs((current) => new Set(current).add(customerId));
+
+    try {
+      const response = await fetch(`${adminHandoffsUrl}/${encodeURIComponent(customerId)}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ${response.status} ao finalizar atendimento.`);
+      }
+
+      setHandoffs((current) => current.filter((handoff) => handoff.customerId !== customerId));
+    } catch (err) {
+      setFinalizarHandoffError(
+        err instanceof Error ? err.message : 'Não foi possível finalizar o atendimento.'
+      );
+    } finally {
+      setFinalizandoHandoffs((current) => {
+        const next = new Set(current);
+        next.delete(customerId);
+        return next;
+      });
+    }
+  }
+
   return (
     <main className="min-h-screen bg-neutral-50 px-4 py-8 text-neutral-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -211,6 +240,12 @@ export default function AdminConfigPage() {
             </div>
           )}
 
+          {finalizarHandoffError && (
+            <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+              <p className="text-sm">{finalizarHandoffError}</p>
+            </div>
+          )}
+
           {!isLoadingHandoffs && !handoffsError && handoffs.length === 0 && (
             <p className="mt-5 text-neutral-600">Nenhum atendimento pendente no momento.</p>
           )}
@@ -223,16 +258,31 @@ export default function AdminConfigPage() {
                     <th className="px-4 py-3 font-medium">Cliente</th>
                     <th className="px-4 py-3 font-medium">Pedido</th>
                     <th className="px-4 py-3 font-medium">Criado em</th>
+                    <th className="px-4 py-3 font-medium">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-200">
-                  {handoffs.map((handoff) => (
-                    <tr key={`${handoff.customerId}-${handoff.criadoEm}`}>
-                      <td className="px-4 py-3 font-medium">{handoff.customerId}</td>
-                      <td className="px-4 py-3 text-neutral-700">{handoff.resumoPedido}</td>
-                      <td className="px-4 py-3 text-neutral-700">{formatarCriadoEm(handoff.criadoEm)}</td>
-                    </tr>
-                  ))}
+                  {handoffs.map((handoff) => {
+                    const isFinalizando = finalizandoHandoffs.has(handoff.customerId);
+
+                    return (
+                      <tr key={`${handoff.customerId}-${handoff.criadoEm}`}>
+                        <td className="px-4 py-3 font-medium">{handoff.customerId}</td>
+                        <td className="px-4 py-3 text-neutral-700">{handoff.resumoPedido}</td>
+                        <td className="px-4 py-3 text-neutral-700">{formatarCriadoEm(handoff.criadoEm)}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => finalizarAtendimento(handoff.customerId)}
+                            disabled={isFinalizando}
+                            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isFinalizando ? 'Finalizando...' : 'Finalizar'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
