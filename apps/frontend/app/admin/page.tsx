@@ -39,11 +39,28 @@ type AdminConfig = {
   produtos: Produto[];
 };
 
+type HandoffStatus = 'RECEIVED' | 'PREPARING' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+
 type HumanHandoff = {
   customerId: string;
   resumoPedido: string;
   criadoEm: string;
+  status: HandoffStatus;
+  atualizadoEm: string;
 };
+
+const statusLabels: Record<HandoffStatus, string> = {
+  RECEIVED: 'Recebido',
+  PREPARING: 'Em separação',
+  OUT_FOR_DELIVERY: 'Saiu para entrega',
+  DELIVERED: 'Entregue',
+};
+
+const statusActions: Array<{ label: string; status: HandoffStatus }> = [
+  { label: 'Em separação', status: 'PREPARING' },
+  { label: 'Saiu para entrega', status: 'OUT_FOR_DELIVERY' },
+  { label: 'Entregue', status: 'DELIVERED' },
+];
 
 const diasSemana = [
   ['segunda', 'Segunda'],
@@ -100,6 +117,10 @@ function formatarCriadoEm(criadoEm: string) {
   }).format(data);
 }
 
+function formatarStatus(status: HandoffStatus) {
+  return statusLabels[status] ?? status;
+}
+
 export default function AdminConfigPage() {
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +130,8 @@ export default function AdminConfigPage() {
   const [handoffsError, setHandoffsError] = useState<string | null>(null);
   const [finalizandoHandoffs, setFinalizandoHandoffs] = useState<Set<string>>(new Set());
   const [finalizarHandoffError, setFinalizarHandoffError] = useState<string | null>(null);
+  const [atualizandoStatusHandoffs, setAtualizandoStatusHandoffs] = useState<Set<string>>(new Set());
+  const [atualizarStatusError, setAtualizarStatusError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -215,6 +238,43 @@ export default function AdminConfigPage() {
     }
   }
 
+  async function atualizarStatusAtendimento(customerId: string, status: HandoffStatus) {
+    setAtualizarStatusError(null);
+    setAtualizandoStatusHandoffs((current) => new Set(current).add(customerId));
+
+    try {
+      const response = await fetch(`${adminHandoffsUrl}/${encodeURIComponent(customerId)}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ${response.status} ao atualizar status.`);
+      }
+
+      const handoffAtualizado = (await response.json()) as HumanHandoff;
+
+      setHandoffs((current) =>
+        current.map((handoff) =>
+          handoff.customerId === customerId ? handoffAtualizado : handoff
+        )
+      );
+    } catch (err) {
+      setAtualizarStatusError(
+        err instanceof Error ? err.message : 'Não foi possível atualizar o status.'
+      );
+    } finally {
+      setAtualizandoStatusHandoffs((current) => {
+        const next = new Set(current);
+        next.delete(customerId);
+        return next;
+      });
+    }
+  }
+
   return (
     <main className="min-h-screen bg-neutral-50 px-4 py-8 text-neutral-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -246,17 +306,24 @@ export default function AdminConfigPage() {
             </div>
           )}
 
+          {atualizarStatusError && (
+            <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+              <p className="text-sm">{atualizarStatusError}</p>
+            </div>
+          )}
+
           {!isLoadingHandoffs && !handoffsError && handoffs.length === 0 && (
             <p className="mt-5 text-neutral-600">Nenhum atendimento pendente no momento.</p>
           )}
 
           {!isLoadingHandoffs && !handoffsError && handoffs.length > 0 && (
             <div className="mt-5 overflow-x-auto rounded-lg border border-neutral-200">
-              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[960px] border-collapse text-left text-sm">
                 <thead className="bg-neutral-100 text-neutral-600">
                   <tr>
                     <th className="px-4 py-3 font-medium">Cliente</th>
                     <th className="px-4 py-3 font-medium">Pedido</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Criado em</th>
                     <th className="px-4 py-3 font-medium">Ações</th>
                   </tr>
@@ -264,18 +331,33 @@ export default function AdminConfigPage() {
                 <tbody className="divide-y divide-neutral-200">
                   {handoffs.map((handoff) => {
                     const isFinalizando = finalizandoHandoffs.has(handoff.customerId);
+                    const isAtualizandoStatus = atualizandoStatusHandoffs.has(handoff.customerId);
 
                     return (
                       <tr key={`${handoff.customerId}-${handoff.criadoEm}`}>
                         <td className="px-4 py-3 font-medium">{handoff.customerId}</td>
                         <td className="px-4 py-3 text-neutral-700">{handoff.resumoPedido}</td>
+                        <td className="px-4 py-3 text-neutral-700">{formatarStatus(handoff.status)}</td>
                         <td className="px-4 py-3 text-neutral-700">{formatarCriadoEm(handoff.criadoEm)}</td>
                         <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-2">
+                            {statusActions.map((action) => (
+                              <button
+                                key={action.status}
+                                type="button"
+                                onClick={() => atualizarStatusAtendimento(handoff.customerId, action.status)}
+                                disabled={isAtualizandoStatus || handoff.status === action.status}
+                                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {action.label}
+                              </button>
+                            ))}
+                          </div>
                           <button
                             type="button"
                             onClick={() => finalizarAtendimento(handoff.customerId)}
                             disabled={isFinalizando}
-                            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="mt-2 rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {isFinalizando ? 'Finalizando...' : 'Finalizar'}
                           </button>
