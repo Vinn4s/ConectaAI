@@ -13,6 +13,20 @@ import org.springframework.stereotype.Service;
 @Service
 public class HumanHandoffService {
 
+    public static final String FLOW_TYPE_ORDER_FULFILLMENT = "ORDER_FULFILLMENT";
+    public static final String FLOW_TYPE_SALES_TRANSFER = "SALES_TRANSFER";
+    public static final String FLOW_TYPE_SCHEDULING = "SCHEDULING";
+    public static final String FLOW_TYPE_SERVICE_ORDER = "SERVICE_ORDER";
+    public static final String FLOW_TYPE_SUPPORT = "SUPPORT";
+
+    public static final List<String> FLOW_TYPES_PREVISTOS = List.of(
+        FLOW_TYPE_ORDER_FULFILLMENT,
+        FLOW_TYPE_SALES_TRANSFER,
+        FLOW_TYPE_SCHEDULING,
+        FLOW_TYPE_SERVICE_ORDER,
+        FLOW_TYPE_SUPPORT
+    );
+
     private static final List<String> STATUS_PERMITIDOS = List.of(
         "RECEIVED",
         "PREPARING",
@@ -31,7 +45,14 @@ public class HumanHandoffService {
 
         handoffsPendentes.put(
             customerId,
-            new HumanHandoff(customerId, resumoPedido, agora, "RECEIVED", agora)
+            new HumanHandoff(
+                customerId,
+                resumoPedido,
+                FLOW_TYPE_ORDER_FULFILLMENT,
+                agora,
+                "RECEIVED",
+                agora
+            )
         );
     }
 
@@ -52,6 +73,7 @@ public class HumanHandoffService {
             (id, handoffAtual) -> new HumanHandoff(
                 handoffAtual.customerId(),
                 handoffAtual.resumoPedido(),
+                handoffAtual.flowType(),
                 handoffAtual.criadoEm(),
                 statusNormalizado,
                 Instant.now().toString()
@@ -86,6 +108,7 @@ public class HumanHandoffService {
     public record HumanHandoff(
         String customerId,
         String resumoPedido,
+        String flowType,
         String criadoEm,
         String status,
         String atualizadoEm
