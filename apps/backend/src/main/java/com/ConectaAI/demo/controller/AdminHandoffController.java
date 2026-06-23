@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ConectaAI.demo.service.HumanHandoffService;
 import com.ConectaAI.demo.service.HumanHandoffService.HumanHandoff;
+import com.ConectaAI.demo.service.MessageTemplateService;
 
 @CrossOrigin(origins = "*")
 @RestController
@@ -23,9 +24,14 @@ import com.ConectaAI.demo.service.HumanHandoffService.HumanHandoff;
 public class AdminHandoffController {
 
     private final HumanHandoffService humanHandoffService;
+    private final MessageTemplateService messageTemplateService;
 
-    public AdminHandoffController(HumanHandoffService humanHandoffService) {
+    public AdminHandoffController(
+        HumanHandoffService humanHandoffService,
+        MessageTemplateService messageTemplateService
+    ) {
         this.humanHandoffService = humanHandoffService;
+        this.messageTemplateService = messageTemplateService;
     }
 
     @GetMapping
@@ -51,7 +57,13 @@ public class AdminHandoffController {
                     ));
             }
 
-            return ResponseEntity.ok(handoffAtualizado.get());
+            HumanHandoff handoff = handoffAtualizado.get();
+            String mensagemCliente = messageTemplateService
+                .buscarMensagem(handoff.flowType(), handoff.status())
+                .map(MessageTemplateService.MessageTemplate::mensagem)
+                .orElse(null);
+
+            return ResponseEntity.ok(AtualizarStatusResponse.from(handoff, mensagemCliente));
         } catch (IllegalArgumentException exception) {
             return ResponseEntity
                 .badRequest()
@@ -66,6 +78,31 @@ public class AdminHandoffController {
     }
 
     public record AtualizarStatusRequest(String status) {}
+
+    public record AtualizarStatusResponse(
+        String customerId,
+        String resumoPedido,
+        String flowType,
+        String criadoEm,
+        String status,
+        String atualizadoEm,
+        String mensagemCliente
+    ) {
+        public static AtualizarStatusResponse from(
+            HumanHandoff handoff,
+            String mensagemCliente
+        ) {
+            return new AtualizarStatusResponse(
+                handoff.customerId(),
+                handoff.resumoPedido(),
+                handoff.flowType(),
+                handoff.criadoEm(),
+                handoff.status(),
+                handoff.atualizadoEm(),
+                mensagemCliente
+            );
+        }
+    }
 
     public record ErrorResponse(String erro) {}
 }
