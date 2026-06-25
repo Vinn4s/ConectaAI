@@ -212,6 +212,14 @@ export default function AdminConfigPage() {
   const enderecoCompleto = useMemo(() => formatarEndereco(config?.empresa.endereco ?? null), [config]);
 
   async function finalizarAtendimento(customerId: string) {
+    const deveFinalizar = window.confirm(
+      'Tem certeza que deseja finalizar este atendimento? Essa ação removerá o atendimento da lista.'
+    );
+
+    if (!deveFinalizar) {
+      return;
+    }
+
     setFinalizarHandoffError(null);
     setFinalizandoHandoffs((current) => new Set(current).add(customerId));
 
