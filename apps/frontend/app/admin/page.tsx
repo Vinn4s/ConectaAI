@@ -44,9 +44,11 @@ type HandoffStatus = 'RECEIVED' | 'PREPARING' | 'OUT_FOR_DELIVERY' | 'DELIVERED'
 type HumanHandoff = {
   customerId: string;
   resumoPedido: string;
+  flowType?: string;
   criadoEm: string;
   status: HandoffStatus;
   atualizadoEm: string;
+  mensagemCliente?: string | null;
 };
 
 const statusLabels: Record<HandoffStatus, string> = {
@@ -267,7 +269,7 @@ export default function AdminConfigPage() {
 
       setHandoffs((current) =>
         current.map((handoff) =>
-          handoff.customerId === customerId ? handoffAtualizado : handoff
+          handoff.customerId === customerId ? { ...handoff, ...handoffAtualizado } : handoff
         )
       );
     } catch (err) {
@@ -340,6 +342,7 @@ export default function AdminConfigPage() {
                   {handoffs.map((handoff) => {
                     const isFinalizando = finalizandoHandoffs.has(handoff.customerId);
                     const isAtualizandoStatus = atualizandoStatusHandoffs.has(handoff.customerId);
+                    const mensagemCliente = handoff.mensagemCliente?.trim();
 
                     return (
                       <tr key={`${handoff.customerId}-${handoff.criadoEm}`}>
@@ -369,6 +372,12 @@ export default function AdminConfigPage() {
                           >
                             {isFinalizando ? 'Finalizando...' : 'Finalizar'}
                           </button>
+                          {mensagemCliente && (
+                            <div className="mt-3 max-w-xl rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                              <p className="font-medium">Mensagem sugerida ao cliente:</p>
+                              <p className="mt-1 whitespace-pre-wrap break-words">{mensagemCliente}</p>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
