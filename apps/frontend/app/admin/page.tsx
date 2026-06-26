@@ -134,6 +134,7 @@ export default function AdminConfigPage() {
   const [finalizarHandoffError, setFinalizarHandoffError] = useState<string | null>(null);
   const [atualizandoStatusHandoffs, setAtualizandoStatusHandoffs] = useState<Set<string>>(new Set());
   const [atualizarStatusError, setAtualizarStatusError] = useState<string | null>(null);
+  const [mensagemCopiadaCustomerId, setMensagemCopiadaCustomerId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -285,6 +286,15 @@ export default function AdminConfigPage() {
     }
   }
 
+  async function copiarMensagemCliente(customerId: string, mensagemCliente: string) {
+    await navigator.clipboard.writeText(mensagemCliente);
+    setMensagemCopiadaCustomerId(customerId);
+
+    window.setTimeout(() => {
+      setMensagemCopiadaCustomerId((current) => (current === customerId ? null : current));
+    }, 3000);
+  }
+
   return (
     <main className="min-h-screen bg-neutral-50 px-4 py-8 text-neutral-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -342,6 +352,7 @@ export default function AdminConfigPage() {
                   {handoffs.map((handoff) => {
                     const isFinalizando = finalizandoHandoffs.has(handoff.customerId);
                     const isAtualizandoStatus = atualizandoStatusHandoffs.has(handoff.customerId);
+                    const isMensagemCopiada = mensagemCopiadaCustomerId === handoff.customerId;
                     const mensagemCliente = handoff.mensagemCliente?.trim();
 
                     return (
@@ -374,7 +385,16 @@ export default function AdminConfigPage() {
                           </button>
                           {mensagemCliente && (
                             <div className="mt-3 max-w-xl rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                              <p className="font-medium">Mensagem sugerida ao cliente:</p>
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="font-medium">Mensagem sugerida ao cliente:</p>
+                                <button
+                                  type="button"
+                                  onClick={() => copiarMensagemCliente(handoff.customerId, mensagemCliente)}
+                                  className="w-fit rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-950 transition hover:bg-amber-100"
+                                >
+                                  {isMensagemCopiada ? 'Copiado!' : 'Copiar mensagem'}
+                                </button>
+                              </div>
                               <p className="mt-1 whitespace-pre-wrap break-words">{mensagemCliente}</p>
                             </div>
                           )}
