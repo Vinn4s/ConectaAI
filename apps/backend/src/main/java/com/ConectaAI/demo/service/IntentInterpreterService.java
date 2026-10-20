@@ -1,37 +1,43 @@
 package com.ConectaAI.demo.service;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import com.ConectaAI.demo.dto.IntentAnalysis;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class IntentInterpreterService {
 
-    @Value("${groq.api.key}")
-    private String apiKey;
+    private static final Set<String> SUPPORTED_INTENTS = Set.of(
+        "BUY",
+        "ADD_TO_ORDER",
+        "REMOVE_FROM_ORDER",
+        "REPLACE_ORDER",
+        "ASK_PRODUCT_INFO",
+        "CONFIRM_ORDER",
+        "CANCEL_ORDER",
+        "PRICE_OBJECTION",
+        "ASK_HOURS",
+        "GENERAL"
+    );
 
-    private final RestTemplate restTemplate = new RestTemplate();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final GroqChatClient groqChatClient;
+    private final ObjectMapper objectMapper;
+
+    public IntentInterpreterService(GroqChatClient groqChatClient, ObjectMapper objectMapper) {
+        this.groqChatClient = groqChatClient;
+        this.objectMapper = objectMapper;
+    }
 
     public IntentAnalysis analyze(String message, boolean hasPendingOrder) {
         try {
-            String url = "https://api.groq.com/openai/v1/chat/completions";
-
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", "llama-3.1-8b-instant");
-
             List<Map<String, String>> messages = new ArrayList<>();
 
             messages.add(Map.of(
@@ -73,27 +79,18 @@ public class IntentInterpreterService {
                 "content", message
             ));
 
-            body.put("messages", messages);
-            body.put("temperature", 0);
+            String content = groqChatClient.complete(
+                messages,
+                Map.of(
+                    "temperature", 0,
+                    "max_completion_tokens", 256,
+                    "reasoning_effort", "low",
+                    "include_reasoning", false,
+                    "response_format", Map.of("type", "json_object")
+                )
+            );
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(apiKey);
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
-            HttpEntity<Map<String, Object>> request =
-                new HttpEntity<>(body, headers);
-
-            ResponseEntity<Map> response =
-                restTemplate.postForEntity(url, request, Map.class);
-
-            Map choice = (Map) ((List) response.getBody().get("choices")).get(0);
-            Map messageMap = (Map) choice.get("message");
-
-            String content = messageMap.get("content").toString();
-
-            String json = extractJson(content);
-
-            return objectMapper.readValue(json, IntentAnalysis.class);
+            return parseIntent(content);
 
         } catch (Exception e) {
             System.out.println("Erro ao interpretar intenção: " + e.getMessage());
@@ -102,14 +99,20 @@ public class IntentInterpreterService {
         }
     }
 
-    private String extractJson(String content) {
-        int start = content.indexOf("{");
-        int end = content.lastIndexOf("}");
+    private IntentAnalysis parseIntent(String content) throws JsonProcessingException {
+        IntentAnalysis analysis = objectMapper.readValue(content, IntentAnalysis.class);
+        String intent = analysis.getIntent();
+        String normalizedIntent = intent == null ? "" : intent.trim().toUpperCase(Locale.ROOT);
 
-        if (start >= 0 && end >= start) {
-            return content.substring(start, end + 1);
+        if (!SUPPORTED_INTENTS.contains(normalizedIntent)) {
+            return new IntentAnalysis("GENERAL", 0.0);
         }
 
-        return "{\"intent\":\"GENERAL\",\"confidence\":0.0}";
+        double confidence = analysis.getConfidence();
+        if (!Double.isFinite(confidence) || confidence < 0 || confidence > 1) {
+            confidence = 0.0;
+        }
+
+        return new IntentAnalysis(normalizedIntent, confidence);
     }
 }

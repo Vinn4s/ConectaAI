@@ -78,11 +78,15 @@ Arquivo de exemplo:
 
 SERVER_PORT=8081
 GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-20b
 
 No Windows PowerShell, você pode configurar as variáveis assim:
 
 [Environment]::SetEnvironmentVariable("GROQ_API_KEY", "sua_chave_groq", "User")
+[Environment]::SetEnvironmentVariable("GROQ_MODEL", "openai/gpt-oss-20b", "User")
 [Environment]::SetEnvironmentVariable("SERVER_PORT", "8081", "User")
+
+`GROQ_MODEL` é opcional; sem essa variável, o backend usa `openai/gpt-oss-20b`.
 
 Depois de configurar, feche e reabra o terminal para as variáveis serem reconhecidas.
 

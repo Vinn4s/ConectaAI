@@ -1,17 +1,10 @@
 package com.ConectaAI.demo.service;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 @Service
 public class GroqService {
@@ -20,30 +13,23 @@ public class GroqService {
     private final TimeContextService timeContextService;
     private final ProductCatalogService productCatalogService;
     private final CompanyConfigService companyConfigService;
+    private final GroqChatClient groqChatClient;
 
     public GroqService(
         PdfService pdfService,
         TimeContextService timeContextService,
         ProductCatalogService productCatalogService,
-        CompanyConfigService companyConfigService
+        CompanyConfigService companyConfigService,
+        GroqChatClient groqChatClient
     ) {
         this.pdfService = pdfService;
         this.timeContextService = timeContextService;
         this.productCatalogService = productCatalogService;
         this.companyConfigService = companyConfigService;
+        this.groqChatClient = groqChatClient;
     }
 
-    @Value("${groq.api.key}")
-    private String apiKey;
-
-    private final RestTemplate restTemplate = new RestTemplate();
-
     public String callGroq(String message) {
-
-        String url = "https://api.groq.com/openai/v1/chat/completions";
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("model", "llama-3.1-8b-instant");
 
         List<Map<String, String>> messages = new ArrayList<>();
 
@@ -106,22 +92,7 @@ public class GroqService {
             "content", message
         ));
 
-        body.put("messages", messages);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(apiKey);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        HttpEntity<Map<String, Object>> request =
-            new HttpEntity<>(body, headers);
-
-        ResponseEntity<Map> response =
-            restTemplate.postForEntity(url, request, Map.class);
-
-        Map choice = (Map) ((List) response.getBody().get("choices")).get(0);
-        Map messageMap = (Map) choice.get("message");
-
-        return messageMap.get("content").toString();
+        return groqChatClient.complete(messages);
     }
 
 }
