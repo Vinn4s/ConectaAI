@@ -1,5 +1,6 @@
 package com.ConectaAI.demo.controller;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -83,9 +84,9 @@ public class AdminHandoffController {
         String customerId,
         String resumoPedido,
         String flowType,
-        String criadoEm,
+        Instant criadoEm,
         String status,
-        String atualizadoEm,
+        Instant atualizadoEm,
         String mensagemCliente
     ) {
         public static AtualizarStatusResponse from(

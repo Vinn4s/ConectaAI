@@ -1,14 +1,15 @@
 package com.ConectaAI.demo.service;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.ConectaAI.demo.model.HumanHandoffEntity;
+import com.ConectaAI.demo.repository.HumanHandoffRepository;
 
 @Service
 public class HumanHandoffService {
@@ -38,14 +39,18 @@ public class HumanHandoffService {
 
     private static final String STATUS_PERMITIDOS_TEXTO = String.join(", ", STATUS_PERMITIDOS);
 
-    private final Map<String, HumanHandoff> handoffsPendentes = new ConcurrentHashMap<>();
+    private final HumanHandoffRepository humanHandoffRepository;
 
+    public HumanHandoffService(HumanHandoffRepository humanHandoffRepository) {
+        this.humanHandoffRepository = humanHandoffRepository;
+    }
+
+    @Transactional
     public void registrarClienteAguardandoHumano(String customerId, String resumoPedido) {
-        String agora = Instant.now().toString();
+        Instant agora = Instant.now();
 
-        handoffsPendentes.put(
-            customerId,
-            new HumanHandoff(
+        humanHandoffRepository.save(
+            new HumanHandoffEntity(
                 customerId,
                 resumoPedido,
                 FLOW_TYPE_ORDER_FULFILLMENT,
@@ -57,34 +62,32 @@ public class HumanHandoffService {
     }
 
     public boolean clienteAguardandoHumano(String customerId) {
-        return handoffsPendentes.containsKey(customerId);
+        return humanHandoffRepository.existsById(customerId);
     }
 
     public List<HumanHandoff> listarAtendimentosPendentes() {
-        return new ArrayList<>(handoffsPendentes.values());
+        return humanHandoffRepository.findAllByOrderByCriadoEmDesc().stream()
+            .map(this::toHumanHandoff)
+            .toList();
     }
 
+    @Transactional
     public Optional<HumanHandoff> atualizarStatus(String customerId, String status) {
         String statusNormalizado = normalizarStatus(status);
         validarStatus(statusNormalizado);
 
-        HumanHandoff handoffAtualizado = handoffsPendentes.computeIfPresent(
-            customerId,
-            (id, handoffAtual) -> new HumanHandoff(
-                handoffAtual.customerId(),
-                handoffAtual.resumoPedido(),
-                handoffAtual.flowType(),
-                handoffAtual.criadoEm(),
-                statusNormalizado,
-                Instant.now().toString()
-            )
-        );
-
-        return Optional.ofNullable(handoffAtualizado);
+        return humanHandoffRepository.findById(customerId)
+            .map(handoff -> {
+                handoff.atualizarStatus(statusNormalizado, Instant.now());
+                return toHumanHandoff(handoff);
+            });
     }
 
+    @Transactional
     public void removerCliente(String customerId) {
-        handoffsPendentes.remove(customerId);
+        if (humanHandoffRepository.existsById(customerId)) {
+            humanHandoffRepository.deleteById(customerId);
+        }
     }
 
     private String normalizarStatus(String status) {
@@ -105,12 +108,23 @@ public class HumanHandoffService {
         }
     }
 
+    private HumanHandoff toHumanHandoff(HumanHandoffEntity handoff) {
+        return new HumanHandoff(
+            handoff.getCustomerId(),
+            handoff.getResumoPedido(),
+            handoff.getFlowType(),
+            handoff.getCriadoEm(),
+            handoff.getStatus(),
+            handoff.getAtualizadoEm()
+        );
+    }
+
     public record HumanHandoff(
         String customerId,
         String resumoPedido,
         String flowType,
-        String criadoEm,
+        Instant criadoEm,
         String status,
-        String atualizadoEm
+        Instant atualizadoEm
     ) {}
 }

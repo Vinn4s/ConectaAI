@@ -33,6 +33,9 @@ apps/**/target
 .gradle
 apps/**/.gradle
 
+# Local persistent database
+apps/backend/data/
+
 # WhatsApp / Baileys auth session
 auth_info_baileys
 apps/**/auth_info_baileys
