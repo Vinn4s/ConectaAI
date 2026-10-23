@@ -15,6 +15,9 @@ import java.util.StringJoiner;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
+import com.ConectaAI.demo.model.CompanyConfigEntity;
+import com.ConectaAI.demo.model.CompanyConfigEntity.HorarioFuncionamentoEmbeddable;
+import com.ConectaAI.demo.repository.CompanyConfigRepository;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -22,11 +25,30 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class CompanyConfigService {
 
     private static final String CONFIG_FILE = "empresa-config.json";
+    private static final long SINGLETON_CONFIG_ID = 1L;
 
-    private final EmpresaConfig config;
+    private final CompanyConfigRepository companyConfigRepository;
+    private final ObjectMapper objectMapper;
 
-    public CompanyConfigService(ObjectMapper objectMapper) {
-        this.config = carregarConfig(objectMapper);
+    public CompanyConfigService(CompanyConfigRepository companyConfigRepository, ObjectMapper objectMapper) {
+        this.companyConfigRepository = companyConfigRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * Returns the persisted singleton configuration. The bundled JSON is retained only as a
+     * bootstrap source for existing deployments that do not yet have a database record.
+     */
+    private EmpresaConfig getConfig() {
+        return companyConfigRepository.findById(SINGLETON_CONFIG_ID)
+            .map(this::toConfig)
+            .orElseGet(this::criarConfiguracaoInicial);
+    }
+
+    private EmpresaConfig criarConfiguracaoInicial() {
+        EmpresaConfig configInicial = carregarConfig(objectMapper);
+        CompanyConfigEntity configuracaoPersistida = companyConfigRepository.save(toEntity(configInicial));
+        return toConfig(configuracaoPersistida);
     }
 
     private EmpresaConfig carregarConfig(ObjectMapper objectMapper) {
@@ -60,6 +82,7 @@ public class CompanyConfigService {
     }
 
     public String getCompanyInfoFormattedForIa() {
+        EmpresaConfig config = getConfig();
         Empresa empresa = config.empresa;
         StringBuilder info = new StringBuilder();
         
@@ -83,6 +106,7 @@ public class CompanyConfigService {
     }
 
     public EmpresaInfo getEmpresaInfo() {
+        EmpresaConfig config = getConfig();
         Empresa empresa = config.empresa;
 
         return new EmpresaInfo(
@@ -95,6 +119,7 @@ public class CompanyConfigService {
     }
 
     public Map<String, HorarioFuncionamentoInfo> getHorarioFuncionamento() {
+        EmpresaConfig config = getConfig();
         Map<String, HorarioFuncionamentoInfo> horarios = new LinkedHashMap<>();
 
         for (Map.Entry<String, HorarioFuncionamento> entry : config.horarioFuncionamento.entrySet()) {
@@ -127,6 +152,7 @@ public class CompanyConfigService {
     }
 
     public String getRespostaHorarioFuncionamento() {
+        EmpresaConfig config = getConfig();
 
         ZoneId zoneId = ZoneId.of(valorOuPadrao(config.empresa.timezone, "America/Fortaleza"));
 
@@ -228,6 +254,62 @@ public class CompanyConfigService {
         return value == null || value.isBlank();
     }
 
+    private CompanyConfigEntity toEntity(EmpresaConfig config) {
+        Empresa empresa = config.empresa;
+        Endereco endereco = empresa.endereco;
+        List<HorarioFuncionamentoEmbeddable> horarios = config.horarioFuncionamento.entrySet().stream()
+            .map(entry -> {
+                HorarioFuncionamento horario = entry.getValue();
+                return new HorarioFuncionamentoEmbeddable(
+                    entry.getKey(),
+                    horario == null ? null : horario.abertura,
+                    horario == null ? null : horario.fechamento
+                );
+            })
+            .toList();
+
+        return new CompanyConfigEntity(
+            empresa.nome,
+            empresa.telefone,
+            empresa.timezone,
+            endereco == null ? null : endereco.logradouro,
+            endereco == null ? null : endereco.numero,
+            endereco == null ? null : endereco.bairro,
+            endereco == null ? null : endereco.cidade,
+            endereco == null ? null : endereco.estado,
+            endereco == null ? null : endereco.cep,
+            empresa.formasPagamento,
+            horarios
+        );
+    }
+
+    private EmpresaConfig toConfig(CompanyConfigEntity entity) {
+        Empresa empresa = new Empresa();
+        empresa.nome = entity.getNome();
+        empresa.telefone = entity.getTelefone();
+        empresa.timezone = entity.getTimezone();
+        empresa.formasPagamento = entity.getFormasPagamento();
+        empresa.endereco = new Endereco();
+        empresa.endereco.logradouro = entity.getLogradouro();
+        empresa.endereco.numero = entity.getNumero();
+        empresa.endereco.bairro = entity.getBairro();
+        empresa.endereco.cidade = entity.getCidade();
+        empresa.endereco.estado = entity.getEstado();
+        empresa.endereco.cep = entity.getCep();
+
+        EmpresaConfig config = new EmpresaConfig();
+        config.empresa = empresa;
+        config.horarioFuncionamento = new LinkedHashMap<>();
+        for (HorarioFuncionamentoEmbeddable horarioPersistido : entity.getHorarioFuncionamento()) {
+            HorarioFuncionamento horario = new HorarioFuncionamento();
+            horario.abertura = horarioPersistido.getAbertura();
+            horario.fechamento = horarioPersistido.getFechamento();
+            config.horarioFuncionamento.put(horarioPersistido.getDiaSemana(), horario);
+        }
+        validarConfig(config);
+        return config;
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class EmpresaConfig {
         public Empresa empresa;
@@ -282,6 +364,6 @@ public class CompanyConfigService {
     ) {}
 
     private String valorOuPadrao(String value, String defaultValue) {
-    return isBlank(value) ? defaultValue : value;
-}
+        return isBlank(value) ? defaultValue : value;
+    }
 }
