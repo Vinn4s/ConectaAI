@@ -12,6 +12,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import com.ConectaAI.demo.model.Produto;
+import com.ConectaAI.demo.model.ProductEntity;
+import com.ConectaAI.demo.repository.ProductRepository;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -20,13 +22,35 @@ public class ProductCatalogService {
 
     private static final String CONFIG_FILE = "empresa-config.json";
 
-    private final Map<String, Produto> produtos;
+    private final ProductRepository productRepository;
+    private final ObjectMapper objectMapper;
 
-    public ProductCatalogService(ObjectMapper objectMapper) {
-        this.produtos = carregarCatalogo(objectMapper);
+    public ProductCatalogService(ProductRepository productRepository, ObjectMapper objectMapper) {
+        this.productRepository = productRepository;
+        this.objectMapper = objectMapper;
     }
 
-    private Map<String, Produto> carregarCatalogo(ObjectMapper objectMapper) {
+    /**
+     * Returns the persisted catalog. The bundled JSON remains only as a bootstrap source
+     * for installations that do not yet have products in the database.
+     */
+    private Map<String, Produto> getCatalogo() {
+        List<ProductEntity> produtosPersistidos = productRepository.findAllByOrderByIdAsc();
+        if (produtosPersistidos.isEmpty()) {
+            produtosPersistidos = productRepository.saveAll(carregarCatalogoInicial());
+        }
+
+        Map<String, Produto> catalogo = new LinkedHashMap<>();
+        for (ProductEntity produtoPersistido : produtosPersistidos) {
+            Produto produto = toProduto(produtoPersistido);
+            if (catalogo.put(produto.nome(), produto) != null) {
+                throw new IllegalStateException("Catálogo persistido inválido: produto duplicado '" + produto.nome() + "'.");
+            }
+        }
+        return catalogo;
+    }
+
+    private List<ProductEntity> carregarCatalogoInicial() {
         ClassPathResource resource = new ClassPathResource(CONFIG_FILE);
 
         if (!resource.exists()) {
@@ -35,33 +59,33 @@ public class ProductCatalogService {
 
         try (InputStream inputStream = resource.getInputStream()) {
             EmpresaConfig config = objectMapper.readValue(inputStream, EmpresaConfig.class);
-            return criarCatalogo(config);
+            return criarProdutosPersistidos(config);
         } catch (IOException e) {
             throw new IllegalStateException("Erro ao carregar o catálogo de produtos do arquivo " + CONFIG_FILE, e);
         }
     }
 
-    private Map<String, Produto> criarCatalogo(EmpresaConfig config) {
+    private List<ProductEntity> criarProdutosPersistidos(EmpresaConfig config) {
         if (config == null || config.produtos == null || config.produtos.isEmpty()) {
             throw new IllegalStateException("Configuração inválida em " + CONFIG_FILE + ": lista de produtos ausente ou vazia.");
         }
 
-        Map<String, Produto> catalogo = new LinkedHashMap<>();
+        Map<String, ProductEntity> catalogo = new LinkedHashMap<>();
 
         for (ProdutoConfig produtoConfig : config.produtos) {
-            Produto produto = criarProduto(produtoConfig);
+            ProductEntity produto = criarProdutoPersistido(produtoConfig);
 
-            if (catalogo.put(produto.nome(), produto) != null) {
+            if (catalogo.put(produto.getNome(), produto) != null) {
                 throw new IllegalStateException(
-                    "Configuração inválida em " + CONFIG_FILE + ": produto duplicado '" + produto.nome() + "'."
+                    "Configuração inválida em " + CONFIG_FILE + ": produto duplicado '" + produto.getNome() + "'."
                 );
             }
         }
 
-        return Collections.unmodifiableMap(catalogo);
+        return new ArrayList<>(catalogo.values());
     }
 
-    private Produto criarProduto(ProdutoConfig produtoConfig) {
+    private ProductEntity criarProdutoPersistido(ProdutoConfig produtoConfig) {
         if (produtoConfig == null
             || isBlank(produtoConfig.nome)
             || produtoConfig.preco == null
@@ -72,7 +96,7 @@ public class ProductCatalogService {
             throw new IllegalStateException("Configuração inválida em " + CONFIG_FILE + ": produto incompleto.");
         }
 
-        return new Produto(
+        return new ProductEntity(
             produtoConfig.nome,
             produtoConfig.preco,
             produtoConfig.unidadeSingular,
@@ -86,17 +110,17 @@ public class ProductCatalogService {
     }
 
     public Map<String, Produto> getProdutos() {
-        return produtos;
+        return Collections.unmodifiableMap(new LinkedHashMap<>(getCatalogo()));
     }
 
     public List<Produto> getListaProdutos() {
-        return new ArrayList<>(produtos.values());
+        return new ArrayList<>(getCatalogo().values());
     }
 
     public String getCatalogoFormatadoParaIa() {
         StringBuilder catalogoFormatado = new StringBuilder();
 
-        for (Produto produto : produtos.values()) {
+        for (Produto produto : getCatalogo().values()) {
             catalogoFormatado
                 .append("- ")
                 .append(produto.nome())
@@ -108,6 +132,24 @@ public class ProductCatalogService {
         }
 
         return catalogoFormatado.toString().trim();
+    }
+
+    private Produto toProduto(ProductEntity produtoPersistido) {
+        List<String> aliases = produtoPersistido.getAliases();
+        if (isBlank(produtoPersistido.getNome())
+            || isBlank(produtoPersistido.getUnidadeSingular())
+            || isBlank(produtoPersistido.getUnidadePlural())
+            || aliases.isEmpty()) {
+            throw new IllegalStateException("Catálogo persistido inválido: produto incompleto.");
+        }
+
+        return new Produto(
+            produtoPersistido.getNome(),
+            produtoPersistido.getPreco(),
+            produtoPersistido.getUnidadeSingular(),
+            produtoPersistido.getUnidadePlural(),
+            aliases
+        );
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

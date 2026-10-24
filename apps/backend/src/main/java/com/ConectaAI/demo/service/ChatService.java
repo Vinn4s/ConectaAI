@@ -20,7 +20,7 @@ public class ChatService {
     private final IntentInterpreterService intentInterpreterService;
     private final CompanyConfigService companyConfigService;
     private final HumanHandoffService humanHandoffService;
-    private final Map<String, Produto> produtos;
+    private final ProductCatalogService productCatalogService;
 
     private final Map<String, PedidoPendente> pedidosPendentes = new ConcurrentHashMap<>();
 
@@ -38,7 +38,7 @@ public class ChatService {
         this.intentInterpreterService = intentInterpreterService;
         this.companyConfigService = companyConfigService;
         this.humanHandoffService = humanHandoffService;
-        this.produtos = productCatalogService.getProdutos();
+        this.productCatalogService = productCatalogService;
     }
 
     public ChatResponse processMessage(String customerId, String message) {
@@ -266,7 +266,7 @@ public class ChatService {
     private List<Produto> encontrarProdutos(String msg) {
         List<Produto> encontrados = new ArrayList<>();
 
-        for (Produto produto : produtos.values()) {
+        for (Produto produto : productCatalogService.getProdutos().values()) {
             for (String alias : produto.aliases()) {
                 if (msg.contains(alias)) {
                     encontrados.add(produto);
@@ -281,7 +281,7 @@ public class ChatService {
     private List<ItemPedido> extrairItensPedido(String msg) {
         Map<String, ItemPedido> itens = new LinkedHashMap<>();
 
-        for (Produto produto : produtos.values()) {
+        for (Produto produto : productCatalogService.getProdutos().values()) {
             for (String alias : produto.aliases()) {
 
                 String regex =
@@ -584,7 +584,7 @@ public class ChatService {
 private String montarCatalogoCompleto() {
     StringBuilder resposta = new StringBuilder("Nossa lista de produtos inclui:\n\n");
 
-    for (Produto produto : produtos.values()) {
+    for (Produto produto : productCatalogService.getProdutos().values()) {
         resposta.append("- ")
             .append(capitalizar(produto.nome()))
             .append(" - R$ ")
