@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 const adminConfigUrl = 'http://localhost:8081/admin/config';
 const adminHandoffsUrl = 'http://localhost:8081/admin/handoffs';
+const adminProductsUrl = 'http://localhost:8081/admin/products';
 
 type Empresa = {
   nome: string;
@@ -31,6 +32,27 @@ type Produto = {
   unidadeSingular: string;
   unidadePlural: string;
   aliases: string[];
+};
+
+type ProdutoAdministrativo = Produto & {
+  id: number;
+  ativo: boolean;
+};
+
+type ProdutoForm = {
+  nome: string;
+  preco: string;
+  unidadeSingular: string;
+  unidadePlural: string;
+  aliases: string;
+};
+
+const produtoVazio: ProdutoForm = {
+  nome: '',
+  preco: '',
+  unidadeSingular: '',
+  unidadePlural: '',
+  aliases: '',
 };
 
 type AdminConfig = {
@@ -135,6 +157,14 @@ export default function AdminConfigPage() {
   const [atualizandoStatusHandoffs, setAtualizandoStatusHandoffs] = useState<Set<string>>(new Set());
   const [atualizarStatusError, setAtualizarStatusError] = useState<string | null>(null);
   const [mensagemCopiadaCustomerId, setMensagemCopiadaCustomerId] = useState<string | null>(null);
+  const [produtos, setProdutos] = useState<ProdutoAdministrativo[]>([]);
+  const [isLoadingProdutos, setIsLoadingProdutos] = useState(true);
+  const [produtosError, setProdutosError] = useState<string | null>(null);
+  const [produtoEmEdicao, setProdutoEmEdicao] = useState<ProdutoAdministrativo | null>(null);
+  const [produtoForm, setProdutoForm] = useState<ProdutoForm>(produtoVazio);
+  const [isProductFormOpen, setIsProductFormOpen] = useState(false);
+  const [isSalvandoProduto, setIsSalvandoProduto] = useState(false);
+  const [produtoAtivandoId, setProdutoAtivandoId] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -168,6 +198,38 @@ export default function AdminConfigPage() {
 
     carregarConfig();
 
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function carregarProdutos() {
+      try {
+        setIsLoadingProdutos(true);
+        setProdutosError(null);
+        const response = await fetch(adminProductsUrl);
+        if (!response.ok) {
+          throw new Error(`Erro ${response.status} ao carregar produtos.`);
+        }
+        const data = (await response.json()) as ProdutoAdministrativo[];
+        if (isMounted) {
+          setProdutos(data);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setProdutosError(err instanceof Error ? err.message : 'Não foi possível carregar os produtos.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingProdutos(false);
+        }
+      }
+    }
+
+    carregarProdutos();
     return () => {
       isMounted = false;
     };
@@ -293,6 +355,95 @@ export default function AdminConfigPage() {
     window.setTimeout(() => {
       setMensagemCopiadaCustomerId((current) => (current === customerId ? null : current));
     }, 3000);
+  }
+
+  function iniciarNovoProduto() {
+    setProdutoEmEdicao(null);
+    setProdutoForm(produtoVazio);
+    setIsProductFormOpen(true);
+    setProdutosError(null);
+  }
+
+  function iniciarEdicaoProduto(produto: ProdutoAdministrativo) {
+    setProdutoEmEdicao(produto);
+    setIsProductFormOpen(true);
+    setProdutoForm({
+      nome: produto.nome,
+      preco: String(produto.preco),
+      unidadeSingular: produto.unidadeSingular,
+      unidadePlural: produto.unidadePlural,
+      aliases: produto.aliases.join(', '),
+    });
+    setProdutosError(null);
+  }
+
+  function cancelarEdicaoProduto() {
+    setProdutoEmEdicao(null);
+    setProdutoForm(produtoVazio);
+    setIsProductFormOpen(false);
+  }
+
+  async function salvarProduto(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const preco = Number(produtoForm.preco);
+    if (!Number.isInteger(preco) || preco < 0) {
+      setProdutosError('Informe um preço inteiro maior ou igual a zero.');
+      return;
+    }
+
+    setIsSalvandoProduto(true);
+    setProdutosError(null);
+    try {
+      const response = await fetch(
+        produtoEmEdicao ? `${adminProductsUrl}/${produtoEmEdicao.id}` : adminProductsUrl,
+        {
+          method: produtoEmEdicao ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...produtoForm,
+            preco,
+            aliases: produtoForm.aliases.split(',').map((alias) => alias.trim()).filter(Boolean),
+          }),
+        }
+      );
+      const body = (await response.json()) as ProdutoAdministrativo | { erro?: string };
+      if (!response.ok) {
+        throw new Error('erro' in body && body.erro ? body.erro : `Erro ${response.status} ao salvar produto.`);
+      }
+      const produtoSalvo = body as ProdutoAdministrativo;
+      setProdutos((current) =>
+        produtoEmEdicao
+          ? current.map((produto) => (produto.id === produtoSalvo.id ? produtoSalvo : produto))
+          : [...current, produtoSalvo]
+      );
+      cancelarEdicaoProduto();
+    } catch (err) {
+      setProdutosError(err instanceof Error ? err.message : 'Não foi possível salvar o produto.');
+    } finally {
+      setIsSalvandoProduto(false);
+    }
+  }
+
+  async function alterarAtivacaoProduto(produto: ProdutoAdministrativo) {
+    setProdutoAtivandoId(produto.id);
+    setProdutosError(null);
+    try {
+      const response = await fetch(`${adminProductsUrl}/${produto.id}/active`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ativo: !produto.ativo }),
+      });
+      const body = (await response.json()) as ProdutoAdministrativo | { erro?: string };
+      if (!response.ok) {
+        throw new Error('erro' in body && body.erro ? body.erro : `Erro ${response.status} ao atualizar produto.`);
+      }
+      const produtoAtualizado = body as ProdutoAdministrativo;
+      setProdutos((current) => current.map((item) => (item.id === produtoAtualizado.id ? produtoAtualizado : item)));
+    } catch (err) {
+      setProdutosError(err instanceof Error ? err.message : 'Não foi possível atualizar o produto.');
+    } finally {
+      setProdutoAtivandoId(null);
+    }
   }
 
   return (
@@ -486,40 +637,103 @@ export default function AdminConfigPage() {
             </section>
 
             <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <h2 className="text-xl font-semibold">Catálogo de produtos</h2>
-                <p className="text-sm text-neutral-500">{config.produtos.length} produtos cadastrados</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold">Catálogo de produtos</h2>
+                  {!isLoadingProdutos && !produtosError && (
+                    <p className="mt-1 text-sm text-neutral-500">{produtos.length} produtos cadastrados</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={iniciarNovoProduto}
+                  className="w-fit rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-neutral-700"
+                >
+                  Novo produto
+                </button>
               </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                {config.produtos.map((produto) => (
-                  <article key={produto.nome} className="rounded-lg border border-neutral-200 p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold capitalize">{produto.nome}</h3>
-                        <p className="mt-1 text-sm text-neutral-600">
-                          {formatarPreco(produto.preco)} por {produto.unidadeSingular}
-                        </p>
-                      </div>
+              {produtosError && (
+                <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{produtosError}</div>
+              )}
 
-                      <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700">
-                        {produto.unidadePlural}
-                      </span>
-                    </div>
+              {isProductFormOpen && (
+                <form onSubmit={salvarProduto} className="mt-5 grid gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 md:grid-cols-2">
+                  <h3 className="md:col-span-2 text-lg font-semibold">
+                    {produtoEmEdicao ? `Editar ${produtoEmEdicao.nome}` : 'Novo produto'}
+                  </h3>
+                  {([
+                    ['nome', 'Nome'],
+                    ['preco', 'Preço (R$ inteiro)'],
+                    ['unidadeSingular', 'Unidade singular'],
+                    ['unidadePlural', 'Unidade plural'],
+                  ] as const).map(([field, label]) => (
+                    <label key={field} className="text-sm font-medium text-neutral-700">
+                      {label}
+                      <input
+                        required
+                        type={field === 'preco' ? 'number' : 'text'}
+                        min={field === 'preco' ? 0 : undefined}
+                        step={field === 'preco' ? 1 : undefined}
+                        value={produtoForm[field]}
+                        onChange={(event) => setProdutoForm((current) => ({ ...current, [field]: event.target.value }))}
+                        className="mt-1 block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-normal outline-none focus:border-neutral-900"
+                      />
+                    </label>
+                  ))}
+                  <label className="md:col-span-2 text-sm font-medium text-neutral-700">
+                    Aliases (separados por vírgula)
+                    <input
+                      required
+                      value={produtoForm.aliases}
+                      onChange={(event) => setProdutoForm((current) => ({ ...current, aliases: event.target.value }))}
+                      className="mt-1 block w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-normal outline-none focus:border-neutral-900"
+                    />
+                  </label>
+                  <div className="flex gap-2 md:col-span-2">
+                    <button type="submit" disabled={isSalvandoProduto} className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
+                      {isSalvandoProduto ? 'Salvando...' : 'Salvar produto'}
+                    </button>
+                    <button type="button" onClick={cancelarEdicaoProduto} className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800">
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
 
-                    <div className="mt-4">
-                      <p className="text-sm font-medium text-neutral-500">Aliases</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {produto.aliases.map((alias) => (
-                          <span key={alias} className="rounded-full bg-neutral-50 px-3 py-1 text-sm text-neutral-700">
-                            {alias}
-                          </span>
-                        ))}
+              {isLoadingProdutos && <p className="mt-5 text-neutral-600">Carregando produtos...</p>}
+
+              {!isLoadingProdutos && !produtosError && produtos.length === 0 && (
+                <p className="mt-5 text-neutral-600">Nenhum produto cadastrado.</p>
+              )}
+
+              {!isLoadingProdutos && produtos.length > 0 && (
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  {produtos.map((produto) => (
+                    <article key={produto.id} className={`rounded-lg border p-4 ${produto.ativo ? 'border-neutral-200' : 'border-neutral-200 bg-neutral-50 opacity-70'}`}>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold capitalize">{produto.nome}</h3>
+                          <p className="mt-1 text-sm text-neutral-600">{formatarPreco(produto.preco)} por {produto.unidadeSingular}</p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-sm ${produto.ativo ? 'bg-emerald-50 text-emerald-800' : 'bg-neutral-200 text-neutral-700'}`}>
+                          {produto.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
                       </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
+                      <p className="mt-3 text-sm text-neutral-600">Plural: {produto.unidadePlural}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {produto.aliases.map((alias) => <span key={alias} className="rounded-full bg-neutral-100 px-3 py-1 text-sm text-neutral-700">{alias}</span>)}
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        <button type="button" onClick={() => iniciarEdicaoProduto(produto)} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-800">Editar</button>
+                        <button type="button" onClick={() => alterarAtivacaoProduto(produto)} disabled={produtoAtivandoId === produto.id} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-800 disabled:opacity-60">
+                          {produtoAtivandoId === produto.id ? 'Atualizando...' : produto.ativo ? 'Desativar' : 'Ativar'}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
           </>
         )}

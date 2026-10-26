@@ -35,6 +35,9 @@ public class ProductEntity {
     @Column(name = "unidade_plural", nullable = false)
     private String unidadePlural;
 
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean ativo = true;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "product_aliases", joinColumns = @JoinColumn(name = "product_id"))
     @OrderColumn(name = "position")
@@ -65,4 +68,21 @@ public class ProductEntity {
     public String getUnidadeSingular() { return unidadeSingular; }
     public String getUnidadePlural() { return unidadePlural; }
     public List<String> getAliases() { return List.copyOf(aliases); }
+    public boolean isAtivo() { return ativo; }
+
+    public void atualizar(
+        String nome,
+        int preco,
+        String unidadeSingular,
+        String unidadePlural,
+        List<String> aliases
+    ) {
+        this.nome = nome;
+        this.preco = preco;
+        this.unidadeSingular = unidadeSingular;
+        this.unidadePlural = unidadePlural;
+        this.aliases = new ArrayList<>(aliases);
+    }
+
+    public void setAtivo(boolean ativo) { this.ativo = ativo; }
 }
