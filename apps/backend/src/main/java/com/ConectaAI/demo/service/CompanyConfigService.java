@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import com.ConectaAI.demo.model.CompanyConfigEntity;
 import com.ConectaAI.demo.model.CompanyConfigEntity.HorarioFuncionamentoEmbeddable;
 import com.ConectaAI.demo.repository.CompanyConfigRepository;
+import com.ConectaAI.demo.dto.AdminCompanyConfigRequest;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -134,6 +135,85 @@ public class CompanyConfigService {
         }
 
         return Collections.unmodifiableMap(horarios);
+    }
+
+    /** Updates the singleton used by the existing chat and IA read paths. */
+    public void atualizarConfiguracao(AdminCompanyConfigRequest request) {
+        validarAtualizacao(request);
+
+        AdminCompanyConfigRequest.Empresa empresa = request.empresa();
+        AdminCompanyConfigRequest.Endereco endereco = empresa.endereco();
+        List<String> formasPagamento = request.empresa().formasPagamento().stream()
+            .map(String::trim)
+            .toList();
+        List<HorarioFuncionamentoEmbeddable> horarios = request.horarioFuncionamento().entrySet().stream()
+            .map(entry -> new HorarioFuncionamentoEmbeddable(
+                entry.getKey(), entry.getValue().abertura(), entry.getValue().fechamento()
+            ))
+            .toList();
+
+        CompanyConfigEntity entity = companyConfigRepository.findById(SINGLETON_CONFIG_ID)
+            .orElseGet(() -> toEntity(carregarConfig(objectMapper)));
+        entity.atualizar(
+            empresa.nome().trim(), limpar(empresa.telefone()), empresa.timezone().trim(),
+            limpar(endereco.logradouro()), limpar(endereco.numero()), limpar(endereco.bairro()),
+            limpar(endereco.cidade()), limpar(endereco.estado()), limpar(endereco.cep()),
+            formasPagamento, horarios
+        );
+        companyConfigRepository.save(entity);
+    }
+
+    private void validarAtualizacao(AdminCompanyConfigRequest request) {
+        if (request == null || request.empresa() == null) {
+            throw new IllegalArgumentException("Informe os dados da empresa.");
+        }
+        AdminCompanyConfigRequest.Empresa empresa = request.empresa();
+        if (isBlank(empresa.nome())) {
+            throw new IllegalArgumentException("O nome da empresa é obrigatório.");
+        }
+        if (isBlank(empresa.timezone())) {
+            throw new IllegalArgumentException("A timezone é obrigatória.");
+        }
+        try {
+            ZoneId.of(empresa.timezone().trim());
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException("Informe uma timezone válida.");
+        }
+        if (empresa.endereco() == null) {
+            throw new IllegalArgumentException("Informe o endereço da empresa.");
+        }
+        if (empresa.formasPagamento() == null || empresa.formasPagamento().stream().anyMatch(this::isBlank)) {
+            throw new IllegalArgumentException("As formas de pagamento não podem conter valores vazios.");
+        }
+        if (request.horarioFuncionamento() == null || request.horarioFuncionamento().isEmpty()) {
+            throw new IllegalArgumentException("Informe o horário de funcionamento.");
+        }
+        for (Map.Entry<String, AdminCompanyConfigRequest.HorarioFuncionamento> entry : request.horarioFuncionamento().entrySet()) {
+            if (!diasSemana().contains(entry.getKey()) || entry.getValue() == null) {
+                throw new IllegalArgumentException("Horário de funcionamento inválido.");
+            }
+            String abertura = entry.getValue().abertura();
+            String fechamento = entry.getValue().fechamento();
+            if (isBlank(abertura) != isBlank(fechamento)) {
+                throw new IllegalArgumentException("Informe abertura e fechamento, ou deixe ambos vazios, para cada dia.");
+            }
+            if (!isBlank(abertura)) {
+                try {
+                    LocalTime.parse(abertura);
+                    LocalTime.parse(fechamento);
+                } catch (RuntimeException exception) {
+                    throw new IllegalArgumentException("Informe os horários no formato HH:mm.");
+                }
+            }
+        }
+    }
+
+    private List<String> diasSemana() {
+        return List.of("segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo");
+    }
+
+    private String limpar(String value) {
+        return isBlank(value) ? null : value.trim();
     }
 
     private EnderecoInfo criarEnderecoInfo(Endereco endereco) {

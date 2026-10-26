@@ -1,11 +1,15 @@
 package com.ConectaAI.demo.controller;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ConectaAI.demo.dto.AdminConfigResponse;
+import com.ConectaAI.demo.dto.AdminCompanyConfigRequest;
 import com.ConectaAI.demo.service.CompanyConfigService;
 import com.ConectaAI.demo.service.ProductCatalogService;
 
@@ -27,10 +31,26 @@ public class AdminConfigController {
 
     @GetMapping
     public AdminConfigResponse getConfig() {
+        return respostaAtual();
+    }
+
+    @PutMapping
+    public ResponseEntity<?> atualizar(@RequestBody AdminCompanyConfigRequest request) {
+        try {
+            companyConfigService.atualizarConfiguracao(request);
+            return ResponseEntity.ok(respostaAtual());
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(exception.getMessage()));
+        }
+    }
+
+    private AdminConfigResponse respostaAtual() {
         return new AdminConfigResponse(
             companyConfigService.getEmpresaInfo(),
             companyConfigService.getHorarioFuncionamento(),
             productCatalogService.getListaProdutos()
         );
     }
+
+    public record ErrorResponse(String erro) {}
 }

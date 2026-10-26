@@ -61,6 +61,15 @@ type AdminConfig = {
   produtos: Produto[];
 };
 
+type ConfigForm = {
+  nome: string;
+  telefone: string;
+  timezone: string;
+  formasPagamento: string;
+  endereco: NonNullable<Empresa['endereco']>;
+  horarioFuncionamento: Record<string, HorarioFuncionamento>;
+};
+
 type HandoffStatus = 'RECEIVED' | 'PREPARING' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
 
 type HumanHandoff = {
@@ -121,6 +130,26 @@ function formatarHorario(horario?: HorarioFuncionamento) {
   return `${horario.abertura} às ${horario.fechamento}`;
 }
 
+function criarFormularioConfig(config: AdminConfig): ConfigForm {
+  return {
+    nome: config.empresa.nome ?? '',
+    telefone: config.empresa.telefone ?? '',
+    timezone: config.empresa.timezone ?? '',
+    formasPagamento: config.empresa.formasPagamento.join(', '),
+    endereco: {
+      logradouro: config.empresa.endereco?.logradouro ?? '',
+      numero: config.empresa.endereco?.numero ?? '',
+      bairro: config.empresa.endereco?.bairro ?? '',
+      cidade: config.empresa.endereco?.cidade ?? '',
+      estado: config.empresa.endereco?.estado ?? '',
+      cep: config.empresa.endereco?.cep ?? '',
+    },
+    horarioFuncionamento: Object.fromEntries(
+      diasSemana.map(([key]) => [key, config.horarioFuncionamento[key] ?? { abertura: null, fechamento: null }])
+    ),
+  };
+}
+
 function formatarPreco(preco: number) {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -149,6 +178,10 @@ export default function AdminConfigPage() {
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [configForm, setConfigForm] = useState<ConfigForm | null>(null);
+  const [isConfigFormOpen, setIsConfigFormOpen] = useState(false);
+  const [isSalvandoConfig, setIsSalvandoConfig] = useState(false);
+  const [configSaveError, setConfigSaveError] = useState<string | null>(null);
   const [handoffs, setHandoffs] = useState<HumanHandoff[]>([]);
   const [isLoadingHandoffs, setIsLoadingHandoffs] = useState(true);
   const [handoffsError, setHandoffsError] = useState<string | null>(null);
@@ -275,6 +308,53 @@ export default function AdminConfigPage() {
   }, []);
 
   const enderecoCompleto = useMemo(() => formatarEndereco(config?.empresa.endereco ?? null), [config]);
+
+  function iniciarEdicaoConfig() {
+    if (!config) return;
+    setConfigForm(criarFormularioConfig(config));
+    setConfigSaveError(null);
+    setIsConfigFormOpen(true);
+  }
+
+  function cancelarEdicaoConfig() {
+    setConfigForm(null);
+    setConfigSaveError(null);
+    setIsConfigFormOpen(false);
+  }
+
+  async function salvarConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!configForm) return;
+
+    setIsSalvandoConfig(true);
+    setConfigSaveError(null);
+    try {
+      const response = await fetch(adminConfigUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresa: {
+            nome: configForm.nome,
+            telefone: configForm.telefone,
+            timezone: configForm.timezone,
+            formasPagamento: configForm.formasPagamento.split(',').map((forma) => forma.trim()).filter(Boolean),
+            endereco: configForm.endereco,
+          },
+          horarioFuncionamento: configForm.horarioFuncionamento,
+        }),
+      });
+      const body = (await response.json()) as AdminConfig | { erro?: string };
+      if (!response.ok) {
+        throw new Error('erro' in body && body.erro ? body.erro : `Erro ${response.status} ao salvar configuração.`);
+      }
+      setConfig(body as AdminConfig);
+      cancelarEdicaoConfig();
+    } catch (err) {
+      setConfigSaveError(err instanceof Error ? err.message : 'Não foi possível salvar a configuração.');
+    } finally {
+      setIsSalvandoConfig(false);
+    }
+  }
 
   async function finalizarAtendimento(customerId: string) {
     const deveFinalizar = window.confirm(
@@ -452,7 +532,7 @@ export default function AdminConfigPage() {
         <header className="border-b border-neutral-200 pb-4">
           <p className="text-sm font-medium uppercase tracking-wide text-neutral-500">Admin</p>
           <h1 className="mt-2 text-3xl font-semibold">Configuração da empresa</h1>
-          <p className="mt-2 text-sm text-neutral-600">Visualização dos dados usados pelo atendimento.</p>
+          <p className="mt-2 text-sm text-neutral-600">Dados usados pelo atendimento e pela IA.</p>
         </header>
 
         <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
@@ -575,7 +655,59 @@ export default function AdminConfigPage() {
         {config && !isLoading && !error && (
           <>
             <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-semibold">Empresa</h2>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-xl font-semibold">Empresa</h2>
+                {!isConfigFormOpen && (
+                  <button type="button" onClick={iniciarEdicaoConfig} className="w-fit rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-neutral-700">
+                    Editar configuração
+                  </button>
+                )}
+              </div>
+
+              {configSaveError && (
+                <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">{configSaveError}</div>
+              )}
+
+              {isConfigFormOpen && configForm ? (
+                <form onSubmit={salvarConfig} className="mt-5 grid gap-4 md:grid-cols-2">
+                  <label className="text-sm font-medium text-neutral-700">Nome
+                    <input required value={configForm.nome} onChange={(event) => setConfigForm((current) => current && { ...current, nome: event.target.value })} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 font-normal" />
+                  </label>
+                  <label className="text-sm font-medium text-neutral-700">Telefone
+                    <input value={configForm.telefone} onChange={(event) => setConfigForm((current) => current && { ...current, telefone: event.target.value })} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 font-normal" />
+                  </label>
+                  <label className="text-sm font-medium text-neutral-700">Timezone
+                    <input required placeholder="America/Sao_Paulo" value={configForm.timezone} onChange={(event) => setConfigForm((current) => current && { ...current, timezone: event.target.value })} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 font-normal" />
+                  </label>
+                  <label className="text-sm font-medium text-neutral-700">Formas de pagamento (separadas por vírgula)
+                    <input value={configForm.formasPagamento} onChange={(event) => setConfigForm((current) => current && { ...current, formasPagamento: event.target.value })} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 font-normal" />
+                  </label>
+                  <fieldset className="grid gap-4 rounded-lg border border-neutral-200 p-4 md:col-span-2 md:grid-cols-3">
+                    <legend className="px-1 text-sm font-medium text-neutral-700">Endereço</legend>
+                    {(['logradouro', 'numero', 'bairro', 'cidade', 'estado', 'cep'] as const).map((field) => (
+                      <label key={field} className="text-sm font-medium capitalize text-neutral-700">{field}
+                        <input value={configForm.endereco[field]} onChange={(event) => setConfigForm((current) => current && { ...current, endereco: { ...current.endereco, [field]: event.target.value } })} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 font-normal" />
+                      </label>
+                    ))}
+                  </fieldset>
+                  <fieldset className="rounded-lg border border-neutral-200 p-4 md:col-span-2">
+                    <legend className="px-1 text-sm font-medium text-neutral-700">Horário de funcionamento</legend>
+                    <div className="mt-3 grid gap-3">
+                      {diasSemana.map(([key, label]) => (
+                        <div key={key} className="grid items-center gap-2 sm:grid-cols-[120px_1fr_1fr]">
+                          <span className="text-sm font-medium">{label}</span>
+                          <input type="time" value={configForm.horarioFuncionamento[key]?.abertura ?? ''} onChange={(event) => setConfigForm((current) => current && ({ ...current, horarioFuncionamento: { ...current.horarioFuncionamento, [key]: { ...current.horarioFuncionamento[key], abertura: event.target.value || null } } }))} aria-label={`Abertura ${label}`} className="rounded-md border border-neutral-300 px-3 py-2" />
+                          <input type="time" value={configForm.horarioFuncionamento[key]?.fechamento ?? ''} onChange={(event) => setConfigForm((current) => current && ({ ...current, horarioFuncionamento: { ...current.horarioFuncionamento, [key]: { ...current.horarioFuncionamento[key], fechamento: event.target.value || null } } }))} aria-label={`Fechamento ${label}`} className="rounded-md border border-neutral-300 px-3 py-2" />
+                        </div>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <div className="flex gap-2 md:col-span-2">
+                    <button type="submit" disabled={isSalvandoConfig} className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60">{isSalvandoConfig ? 'Salvando...' : 'Salvar configuração'}</button>
+                    <button type="button" onClick={cancelarEdicaoConfig} disabled={isSalvandoConfig} className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800">Cancelar</button>
+                  </div>
+                </form>
+              ) : (
 
               <dl className="mt-5 grid gap-5 md:grid-cols-2">
                 <div>
@@ -609,9 +741,10 @@ export default function AdminConfigPage() {
                   <dd className="mt-1 text-base">{enderecoCompleto}</dd>
                 </div>
               </dl>
+              )}
             </section>
 
-            <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
+            {!isConfigFormOpen && <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold">Horário de funcionamento</h2>
 
               <div className="mt-5 overflow-hidden rounded-lg border border-neutral-200">
@@ -635,6 +768,7 @@ export default function AdminConfigPage() {
                 </table>
               </div>
             </section>
+            }
 
             <section className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

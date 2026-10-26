@@ -86,6 +86,34 @@ public class CompanyConfigEntity {
     public List<String> getFormasPagamento() { return List.copyOf(formasPagamento); }
     public List<HorarioFuncionamentoEmbeddable> getHorarioFuncionamento() { return List.copyOf(horarioFuncionamento); }
 
+    public void atualizar(
+        String nome,
+        String telefone,
+        String timezone,
+        String logradouro,
+        String numero,
+        String bairro,
+        String cidade,
+        String estado,
+        String cep,
+        List<String> formasPagamento,
+        List<HorarioFuncionamentoEmbeddable> horarioFuncionamento
+    ) {
+        this.nome = nome;
+        this.telefone = telefone;
+        this.timezone = timezone;
+        this.logradouro = logradouro;
+        this.numero = numero;
+        this.bairro = bairro;
+        this.cidade = cidade;
+        this.estado = estado;
+        this.cep = cep;
+        this.formasPagamento.clear();
+        this.formasPagamento.addAll(formasPagamento);
+        this.horarioFuncionamento.clear();
+        this.horarioFuncionamento.addAll(horarioFuncionamento);
+    }
+
     @Embeddable
     public static class HorarioFuncionamentoEmbeddable {
 
