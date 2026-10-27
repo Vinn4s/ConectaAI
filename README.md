@@ -79,6 +79,7 @@ Arquivo de exemplo:
 SERVER_PORT=8081
 GROQ_API_KEY=your_groq_api_key_here
 GROQ_MODEL=openai/gpt-oss-20b
+ADMIN_API_TOKEN=gere_um_token_longo_e_aleatorio
 
 No Windows PowerShell, você pode configurar as variáveis assim:
 
@@ -87,6 +88,24 @@ No Windows PowerShell, você pode configurar as variáveis assim:
 [Environment]::SetEnvironmentVariable("SERVER_PORT", "8081", "User")
 
 `GROQ_MODEL` é opcional; sem essa variável, o backend usa `openai/gpt-oss-20b`.
+
+### Proteção da API administrativa
+
+As rotas sob `/admin/**` exigem o cabeçalho `X-Admin-Token`, com o mesmo valor de
+`ADMIN_API_TOKEN`. Sem essa variável, o backend falha fechado para essas rotas com
+`503`; com token ausente ou inválido, retorna `401` e `{ "erro": "Acesso administrativo não autorizado." }`.
+As rotas públicas `/chat` e `/webhook` não usam esse mecanismo e mantêm seus contratos.
+
+Para o dashboard administrativo local, configure também no frontend:
+
+```env
+NEXT_PUBLIC_ADMIN_API_TOKEN=o_mesmo_valor_de_ADMIN_API_TOKEN
+```
+
+Esse uso de `NEXT_PUBLIC_` é adequado apenas para esta camada transitória e para um
+dashboard com acesso controlado. Como o valor é entregue ao navegador, ele não deve
+ser tratado como autenticação de usuário definitiva. A próxima etapa deve substituir
+o token compartilhado por identidade de usuário e autorização no servidor.
 
 Depois de configurar, feche e reabra o terminal para as variáveis serem reconhecidas.
 

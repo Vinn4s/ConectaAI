@@ -5,6 +5,17 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 const adminConfigUrl = 'http://localhost:8081/admin/config';
 const adminHandoffsUrl = 'http://localhost:8081/admin/handoffs';
 const adminProductsUrl = 'http://localhost:8081/admin/products';
+const adminApiToken = process.env.NEXT_PUBLIC_ADMIN_API_TOKEN;
+
+function adminFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, {
+    ...init,
+    headers: {
+      ...init.headers,
+      ...(adminApiToken ? { 'X-Admin-Token': adminApiToken } : {}),
+    },
+  });
+}
 
 type Empresa = {
   nome: string;
@@ -207,7 +218,7 @@ export default function AdminConfigPage() {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch(adminConfigUrl);
+        const response = await adminFetch(adminConfigUrl);
 
         if (!response.ok) {
           throw new Error(`Erro ${response.status} ao carregar configuração.`);
@@ -243,7 +254,7 @@ export default function AdminConfigPage() {
       try {
         setIsLoadingProdutos(true);
         setProdutosError(null);
-        const response = await fetch(adminProductsUrl);
+        const response = await adminFetch(adminProductsUrl);
         if (!response.ok) {
           throw new Error(`Erro ${response.status} ao carregar produtos.`);
         }
@@ -276,7 +287,7 @@ export default function AdminConfigPage() {
         setIsLoadingHandoffs(true);
         setHandoffsError(null);
 
-        const response = await fetch(adminHandoffsUrl);
+        const response = await adminFetch(adminHandoffsUrl);
 
         if (!response.ok) {
           throw new Error(`Erro ${response.status} ao carregar atendimentos pendentes.`);
@@ -329,7 +340,7 @@ export default function AdminConfigPage() {
     setIsSalvandoConfig(true);
     setConfigSaveError(null);
     try {
-      const response = await fetch(adminConfigUrl, {
+      const response = await adminFetch(adminConfigUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -369,7 +380,7 @@ export default function AdminConfigPage() {
     setFinalizandoHandoffs((current) => new Set(current).add(customerId));
 
     try {
-      const response = await fetch(`${adminHandoffsUrl}/${encodeURIComponent(customerId)}`, {
+      const response = await adminFetch(`${adminHandoffsUrl}/${encodeURIComponent(customerId)}`, {
         method: 'DELETE',
       });
 
@@ -396,7 +407,7 @@ export default function AdminConfigPage() {
     setAtualizandoStatusHandoffs((current) => new Set(current).add(customerId));
 
     try {
-      const response = await fetch(`${adminHandoffsUrl}/${encodeURIComponent(customerId)}/status`, {
+      const response = await adminFetch(`${adminHandoffsUrl}/${encodeURIComponent(customerId)}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -474,7 +485,7 @@ export default function AdminConfigPage() {
     setIsSalvandoProduto(true);
     setProdutosError(null);
     try {
-      const response = await fetch(
+      const response = await adminFetch(
         produtoEmEdicao ? `${adminProductsUrl}/${produtoEmEdicao.id}` : adminProductsUrl,
         {
           method: produtoEmEdicao ? 'PUT' : 'POST',
@@ -508,7 +519,7 @@ export default function AdminConfigPage() {
     setProdutoAtivandoId(produto.id);
     setProdutosError(null);
     try {
-      const response = await fetch(`${adminProductsUrl}/${produto.id}/active`, {
+      const response = await adminFetch(`${adminProductsUrl}/${produto.id}/active`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ativo: !produto.ativo }),
